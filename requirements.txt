@@ -1,1 +1,7 @@
+# Development / CI dependencies
+pytest
+pytest-xdist
+ruff
+
+# Only needed for parse_pcre2_tests.py (test-data generation)
 google-re2>=1.1
