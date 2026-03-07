@@ -101,6 +101,7 @@ def generate(
     *,
     emit_main: bool = False,
     func_name: str = "regex_match",
+    encoding: str = "utf8",
 ) -> str:
     """High-level API: compile *pattern* and return generated C code.
 
@@ -116,6 +117,10 @@ def generate(
         and returns exit-code 0/1/2.
     func_name:
         Name of the generated C match function.
+    encoding:
+        ``"utf8"`` (default) for Unicode/UTF-8 semantics; ``"bytes"`` for
+        raw byte semantics where ``.`` matches any single byte and
+        literals/classes operate on byte values 0-255.
     """
-    dfa = compile_regex(pattern, flags)
+    dfa = compile_regex(pattern, flags, encoding=encoding)
     return generate_c_code(dfa, func_name=func_name, emit_main=emit_main)

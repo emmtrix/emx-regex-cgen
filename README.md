@@ -34,12 +34,15 @@ pip install -e ".[dev]"
 ```python
 from regex_cgen import generate
 
-# Generate a match function
+# Generate a match function (UTF-8 mode, default)
 c_code = generate(r"\d{4}-\d{2}-\d{2}")
 print(c_code)
 
 # Include a main() for standalone testing
 c_code = generate(r"[a-z]+", emit_main=True)
+
+# Bytes mode: '.' matches any single byte, classes work on raw byte values
+c_code = generate(r"[\x80-\xff]+", encoding="bytes")
 ```
 
 ### CLI
@@ -55,24 +58,31 @@ regex-cgen '[a-z]+\d+' --emit-main -o matcher.c
 gcc -O2 -o matcher matcher.c
 ./matcher "hello42"   # exit 0 (match)
 ./matcher "HELLO"     # exit 1 (no match)
+
+# Bytes mode: match any sequence of high bytes
+regex-cgen --encoding bytes '[\x80-\xff]+' --emit-main -o byte_matcher.c
 ```
 
 ## CLI Reference
 
 ```
 usage: regex-cgen [-h] [-o OUTPUT] [--emit-main] [--func-name NAME]
-                  [--flags FLAGS] pattern
+                  [--flags FLAGS] [--encoding {utf8,bytes}] pattern
 
 Generate C code that performs a fullmatch for a regular expression.
 
 positional arguments:
-  pattern           Regular expression pattern
+  pattern               Regular expression pattern
 
 options:
-  -o, --output      Output file (default: stdout)
-  --emit-main       Also emit a main() function (exit 0=match, 1=no match, 2=error)
-  --func-name NAME  Name of the generated match function (default: regex_match)
-  --flags FLAGS     Regex flags: i (case-insensitive), s (dot-all), m (multiline)
+  -o, --output          Output file (default: stdout)
+  --emit-main           Also emit a main() function (exit 0=match, 1=no match, 2=error)
+  --func-name NAME      Name of the generated match function (default: regex_match)
+  --flags FLAGS         Regex flags: i (case-insensitive), s (dot-all), m (multiline)
+  --encoding {utf8,bytes}
+                        Input encoding: utf8 (default, Unicode-aware) or bytes
+                        (raw byte semantics: '.' = one arbitrary byte, no UTF-8
+                        sequence handling, literals/classes work byte-wise 0-255)
 ```
 
 ## Generated Code Structure

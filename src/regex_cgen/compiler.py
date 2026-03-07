@@ -127,12 +127,19 @@ def _category_bytes(cat: int) -> frozenset[int]:
 class NFABuilder:
     """Build a Thompson NFA from an ``sre_parse`` AST."""
 
-    def __init__(self, *, case_insensitive: bool = False, dot_all: bool = False):
+    def __init__(
+        self,
+        *,
+        case_insensitive: bool = False,
+        dot_all: bool = False,
+        bytes_mode: bool = False,
+    ):
         self._next: int = 0
         self.transitions: dict[tuple[int, int], set[int]] = {}
         self.epsilon: dict[int, set[int]] = {}
         self.case_insensitive = case_insensitive
         self.dot_all = dot_all
+        self.bytes_mode = bytes_mode
 
     # -- state helpers -------------------------------------------------------
 
@@ -159,6 +166,10 @@ class NFABuilder:
 
     def _add_char_raw(self, src: int, code: int, dst: int) -> None:
         """Add transition for one code point (no case expansion)."""
+        if self.bytes_mode:
+            if code <= 255:
+                self._tr(src, code, dst)
+            return
         if code <= 127:
             self._tr(src, code, dst)
         else:
@@ -303,11 +314,13 @@ class NFABuilder:
             self._tr(s_f4, sb, cont4_mid)
 
     def _char_set(self, items: list) -> set[int]:
-        """Resolve an ``IN`` item list to a set of **ASCII byte** values.
+        """Resolve an ``IN`` item list to a set of byte values.
 
-        Only ASCII code-points (0-127) are included.  Non-ASCII code-points
-        must be handled separately via multi-byte UTF-8 paths.
+        In UTF-8 mode only ASCII code-points (0-127) are included; non-ASCII
+        code-points are handled separately via multi-byte UTF-8 paths.
+        In bytes mode all byte values (0-255) are included directly.
         """
+        byte_limit = 256 if self.bytes_mode else 128
         chars: set[int] = set()
         negate = False
         for op, value in items:
@@ -316,22 +329,22 @@ class NFABuilder:
             elif op == LITERAL:
                 if self.case_insensitive:
                     for alt in self._case_variants(value):
-                        if alt <= 127:
+                        if alt < byte_limit:
                             chars.add(alt)
-                elif value <= 127:
+                elif value < byte_limit:
                     chars.add(value)
             elif op == RANGE:
                 lo, hi = value
-                for c in range(lo, min(hi + 1, 128)):
+                for c in range(lo, min(hi + 1, byte_limit)):
                     if self.case_insensitive:
                         for alt in self._case_variants(c):
-                            if alt <= 127:
+                            if alt < byte_limit:
                                 chars.add(alt)
                     else:
                         chars.add(c)
-                # Case-insensitive: also find ASCII chars whose non-ASCII
-                # case-fold equivalents fall within [lo, hi].
-                if self.case_insensitive and hi >= 128:
+                # Case-insensitive (UTF-8 mode only): also find ASCII chars whose
+                # non-ASCII case-fold equivalents fall within [lo, hi].
+                if not self.bytes_mode and self.case_insensitive and hi >= 128:
                     non_ascii_lo = max(lo, 128)
                     for cf_key, equivalents in _CF_TABLE.items():
                         if len(cf_key) == 1 and ord(cf_key) <= 127:
@@ -341,10 +354,9 @@ class NFABuilder:
                                         chars.add(alt)
             elif op == CATEGORY:
                 chars |= set(_category_bytes(value))
-        # Always restrict to ASCII range; non-ASCII handled via UTF-8 paths
-        chars &= set(range(128))
+        chars &= set(range(byte_limit))
         if negate:
-            chars = set(range(128)) - chars
+            chars = set(range(byte_limit)) - chars
         return chars
 
     def _excluded_cps(self, items: list) -> set[int]:
@@ -535,6 +547,18 @@ class NFABuilder:
 
     def _not_literal(self, code: int) -> tuple[int, int]:
         s0, s1 = self._new(), self._new()
+        if self.bytes_mode:
+            excluded: set[int] = set()
+            if self.case_insensitive:
+                for alt in self._case_variants(code):
+                    if alt <= 255:
+                        excluded.add(alt)
+            elif code <= 255:
+                excluded.add(code)
+            for b in range(256):
+                if b not in excluded:
+                    self._tr(s0, b, s1)
+            return s0, s1
         excluded_ascii: set[int] = set()
         excluded_nonascii: set[int] = set()
         if self.case_insensitive:
@@ -557,6 +581,12 @@ class NFABuilder:
 
     def _any(self) -> tuple[int, int]:
         s0, s1 = self._new(), self._new()
+        if self.bytes_mode:
+            # Bytes mode: match any single byte (except \n in non-dotall mode)
+            for b in range(256):
+                if self.dot_all or b != 10:
+                    self._tr(s0, b, s1)
+            return s0, s1
         # ASCII bytes (except \n in non-dotall mode)
         for b in range(128):
             if self.dot_all or b != 10:  # '\n' == 10
@@ -568,27 +598,28 @@ class NFABuilder:
     def _in(self, items: list) -> tuple[int, int]:
         s0, s1 = self._new(), self._new()
         negate = any(op == NEGATE for op, _ in items)
-        # ASCII byte transitions (capped to 0-127)
+        # Byte transitions (all 256 in bytes mode, ASCII only in UTF-8 mode)
         for b in self._char_set(items):
             self._tr(s0, b, s1)
-        if negate:
-            # Add multi-byte UTF-8 paths for non-excluded code points
-            self._add_utf8_paths(s0, s1, excluded_cps=self._excluded_cps(items))
-        else:
-            # Add multi-byte UTF-8 paths for included non-ASCII code points
-            for code in self._non_ascii_codes(items):
-                self._add_char(s0, code, s1)
-            # Handle 3-byte and 4-byte code-point ranges not covered above
-            for op, value in items:
-                if op == RANGE:
-                    lo, hi = value
-                    if hi >= 0x800:
-                        self._add_3byte_range(s0, s1, lo, hi)
-                    if hi >= 0x10000:
-                        self._add_4byte_range(s0, s1, lo, hi)
-            # NOT-categories (e.g. \S, \D, \W) implicitly include all non-ASCII
-            if self._needs_utf8_accept(items):
-                self._add_utf8_paths(s0, s1)
+        if not self.bytes_mode:
+            if negate:
+                # Add multi-byte UTF-8 paths for non-excluded code points
+                self._add_utf8_paths(s0, s1, excluded_cps=self._excluded_cps(items))
+            else:
+                # Add multi-byte UTF-8 paths for included non-ASCII code points
+                for code in self._non_ascii_codes(items):
+                    self._add_char(s0, code, s1)
+                # Handle 3-byte and 4-byte code-point ranges not covered above
+                for op, value in items:
+                    if op == RANGE:
+                        lo, hi = value
+                        if hi >= 0x800:
+                            self._add_3byte_range(s0, s1, lo, hi)
+                        if hi >= 0x10000:
+                            self._add_4byte_range(s0, s1, lo, hi)
+                # NOT-categories (e.g. \S, \D, \W) implicitly include all non-ASCII
+                if self._needs_utf8_accept(items):
+                    self._add_utf8_paths(s0, s1)
         return s0, s1
 
     @staticmethod
@@ -967,12 +998,22 @@ def _preprocess_pattern(pattern: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def compile_regex(pattern: str, flags: str = "") -> dict:
+def compile_regex(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
     """Compile *pattern* to a minimised, renumbered DFA.
 
     Returns a dict with ``num_states``, ``initial``, ``accept``, and
     ``transitions`` keys.
+
+    Parameters
+    ----------
+    encoding:
+        ``"utf8"`` (default) treats the input as UTF-8 text; ``.`` matches
+        one Unicode code point and character classes are Unicode-aware.
+        ``"bytes"`` uses pure byte semantics: ``.`` matches one arbitrary
+        byte and all literals/classes operate on raw byte values (0-255).
     """
+    if encoding not in ("utf8", "bytes"):
+        raise ValueError(f"encoding must be 'utf8' or 'bytes', got {encoding!r}")
     re_flags = 0
     ci = False
     da = False
@@ -992,7 +1033,7 @@ def compile_regex(pattern: str, flags: str = "") -> dict:
     pattern = _preprocess_pattern(pattern)
     parsed = sre_parse.parse(pattern, re_flags)
 
-    builder = NFABuilder(case_insensitive=ci, dot_all=da)
+    builder = NFABuilder(case_insensitive=ci, dot_all=da, bytes_mode=(encoding == "bytes"))
     start, accept = builder.build(parsed)
 
     dfa = _nfa_to_dfa(builder, start, accept)

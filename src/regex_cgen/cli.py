@@ -35,6 +35,12 @@ def main(argv: list[str] | None = None) -> None:
         default="",
         help="Regex flags: i (case-insensitive), s (dot-all), m (multiline), x (verbose)",
     )
+    parser.add_argument(
+        "--encoding",
+        choices=["utf8", "bytes"],
+        default="utf8",
+        help="Input encoding: utf8 (default, Unicode-aware) or bytes (raw byte semantics)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -44,6 +50,7 @@ def main(argv: list[str] | None = None) -> None:
             flags=args.flags,
             emit_main=args.emit_main,
             func_name=args.func_name,
+            encoding=args.encoding,
         )
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
