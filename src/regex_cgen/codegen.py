@@ -32,7 +32,7 @@ def generate_c_code(
 
     # Choose the narrowest unsigned type that fits
     if n <= 256:
-        state_t = "uint16_t"
+        state_t = "uint8_t"
     elif n <= 65536:
         state_t = "uint16_t"
     else:
