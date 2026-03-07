@@ -88,7 +88,7 @@ def _build_casefold_table() -> dict[str, frozenset[int]]:
     This matches re2's *simple* case-folding behaviour.
     """
     table: dict[str, set[int]] = {}
-    for cp in range(0x10000):
+    for cp in range(0x110000):
         ch = chr(cp)
         cf = ch.casefold()
         if len(cf) == 1:
@@ -329,6 +329,16 @@ class NFABuilder:
                                 chars.add(alt)
                     else:
                         chars.add(c)
+                # Case-insensitive: also find ASCII chars whose non-ASCII
+                # case-fold equivalents fall within [lo, hi].
+                if self.case_insensitive and hi >= 128:
+                    non_ascii_lo = max(lo, 128)
+                    for cf_key, equivalents in _CF_TABLE.items():
+                        if len(cf_key) == 1 and ord(cf_key) <= 127:
+                            if any(non_ascii_lo <= eq <= hi for eq in equivalents):
+                                for alt in equivalents:
+                                    if alt <= 127:
+                                        chars.add(alt)
             elif op == CATEGORY:
                 chars |= set(_category_bytes(value))
         # Always restrict to ASCII range; non-ASCII handled via UTF-8 paths
