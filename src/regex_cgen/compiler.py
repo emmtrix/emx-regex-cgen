@@ -405,6 +405,87 @@ class NFABuilder:
             return set()
         return codes
 
+    def _add_3byte_range(self, src: int, dst: int, lo: int, hi: int) -> None:
+        """Add NFA transitions accepting 3-byte UTF-8 code points in [lo, hi].
+
+        Surrogates (U+D800–U+DFFF) are automatically excluded.
+        """
+        lo = max(lo, 0x800)
+        hi = min(hi, 0xFFFF)
+        if lo > hi:
+            return
+        # Split around surrogates [0xD800, 0xDFFF]
+        if lo <= 0xD7FF:
+            self._add_3byte_range_segment(src, dst, lo, min(hi, 0xD7FF))
+        if hi >= 0xE000:
+            self._add_3byte_range_segment(src, dst, max(lo, 0xE000), hi)
+
+    def _add_3byte_range_segment(self, src: int, dst: int, lo: int, hi: int) -> None:
+        """Add 3-byte UTF-8 NFA transitions for [lo, hi] (no surrogate check)."""
+        if lo > hi:
+            return
+        lo_b1 = ((lo >> 12) & 0x0F) | 0xE0
+        hi_b1 = ((hi >> 12) & 0x0F) | 0xE0
+        for b1 in range(lo_b1, hi_b1 + 1):
+            cp_b1_base = (b1 & 0x0F) << 12
+            sub_lo = max(lo, cp_b1_base)
+            sub_hi = min(hi, cp_b1_base | 0xFFF)
+            if sub_lo > sub_hi:
+                continue
+            lo_b2 = ((sub_lo >> 6) & 0x3F) | 0x80
+            hi_b2 = ((sub_hi >> 6) & 0x3F) | 0x80
+            inter_b1 = self._new()
+            self._tr(src, b1, inter_b1)
+            for b2 in range(lo_b2, hi_b2 + 1):
+                cp_b2_base = cp_b1_base | ((b2 & 0x3F) << 6)
+                sub2_lo = max(sub_lo, cp_b2_base)
+                sub2_hi = min(sub_hi, cp_b2_base | 0x3F)
+                lo_b3 = (sub2_lo & 0x3F) | 0x80
+                hi_b3 = (sub2_hi & 0x3F) | 0x80
+                inter_b2 = self._new()
+                self._tr(inter_b1, b2, inter_b2)
+                for b3 in range(lo_b3, hi_b3 + 1):
+                    self._tr(inter_b2, b3, dst)
+
+    def _add_4byte_range(self, src: int, dst: int, lo: int, hi: int) -> None:
+        """Add NFA transitions accepting 4-byte UTF-8 code points in [lo, hi]."""
+        lo = max(lo, 0x10000)
+        hi = min(hi, 0x10FFFF)
+        if lo > hi:
+            return
+        lo_b1 = ((lo >> 18) & 0x07) | 0xF0
+        hi_b1 = ((hi >> 18) & 0x07) | 0xF0
+        for b1 in range(lo_b1, hi_b1 + 1):
+            cp_b1_base = (b1 & 0x07) << 18
+            sub_lo = max(lo, cp_b1_base)
+            sub_hi = min(hi, cp_b1_base | 0x3FFFF)
+            if sub_lo > sub_hi:
+                continue
+            lo_b2 = ((sub_lo >> 12) & 0x3F) | 0x80
+            hi_b2 = ((sub_hi >> 12) & 0x3F) | 0x80
+            inter_b1 = self._new()
+            self._tr(src, b1, inter_b1)
+            for b2 in range(lo_b2, hi_b2 + 1):
+                cp_b2_base = cp_b1_base | ((b2 & 0x3F) << 12)
+                sub2_lo = max(sub_lo, cp_b2_base)
+                sub2_hi = min(sub_hi, cp_b2_base | 0xFFF)
+                if sub2_lo > sub2_hi:
+                    continue
+                lo_b3 = ((sub2_lo >> 6) & 0x3F) | 0x80
+                hi_b3 = ((sub2_hi >> 6) & 0x3F) | 0x80
+                inter_b2 = self._new()
+                self._tr(inter_b1, b2, inter_b2)
+                for b3 in range(lo_b3, hi_b3 + 1):
+                    cp_b3_base = cp_b2_base | ((b3 & 0x3F) << 6)
+                    sub3_lo = max(sub2_lo, cp_b3_base)
+                    sub3_hi = min(sub2_hi, cp_b3_base | 0x3F)
+                    lo_b4 = (sub3_lo & 0x3F) | 0x80
+                    hi_b4 = (sub3_hi & 0x3F) | 0x80
+                    inter_b3 = self._new()
+                    self._tr(inter_b2, b3, inter_b3)
+                    for b4 in range(lo_b4, hi_b4 + 1):
+                        self._tr(inter_b3, b4, dst)
+
     # -- fragment builders ---------------------------------------------------
 
     def build(self, parsed) -> tuple[int, int]:
@@ -497,6 +578,14 @@ class NFABuilder:
             # Add multi-byte UTF-8 paths for included non-ASCII code points
             for code in self._non_ascii_codes(items):
                 self._add_char(s0, code, s1)
+            # Handle 3-byte and 4-byte code-point ranges not covered above
+            for op, value in items:
+                if op == RANGE:
+                    lo, hi = value
+                    if hi >= 0x800:
+                        self._add_3byte_range(s0, s1, lo, hi)
+                    if hi >= 0x10000:
+                        self._add_4byte_range(s0, s1, lo, hi)
             # NOT-categories (e.g. \S, \D, \W) implicitly include all non-ASCII
             if self._needs_utf8_accept(items):
                 self._add_utf8_paths(s0, s1)
