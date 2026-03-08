@@ -70,7 +70,8 @@ usage: regex-cgen [-h] [-o OUTPUT] [--emit-main] [--prefix PREFIX]
                   [--flags FLAGS] [--encoding {utf8,bytes}]
                   [--row-dedup {yes,no,auto}]
                   [--alphabet-compression {yes,no,auto}]
-                  [--size-threshold SIZE_THRESHOLD] pattern
+                  [--size-threshold SIZE_THRESHOLD]
+                  [--early-exit {yes,no}] pattern
 
 Generate C code that performs a fullmatch for a regular expression.
 
@@ -93,6 +94,9 @@ options:
                         no (never), auto (when table exceeds --size-threshold; default)
   --size-threshold N    Table-size threshold (cells = states × 256) for auto mode
                         (default: 8192)
+  --early-exit {yes,no}
+                        Emit early-exit check in DFA loop: yes (break when dead state
+                        is reached), no (always process full input; default)
 ```
 
 ## Supported Features
@@ -129,6 +133,7 @@ options:
 | `--emit-main` | Include standalone `main()` | [emit\_main.c](tests/golden/emit_main.c) |
 | `--alphabet-compression yes` | Byte equivalence-class compression | [alphabet\_compression.c](tests/golden/alphabet_compression.c) |
 | `--row-dedup yes` | Transition-row deduplication | [row\_dedup.c](tests/golden/row_dedup.c) |
+| `--early-exit yes` | Break DFA loop on dead state (early exit) | [early\_exit.c](tests/golden/early_exit.c) |
 
 ## Generated Code Structure
 

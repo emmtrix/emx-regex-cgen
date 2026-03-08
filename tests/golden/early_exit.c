@@ -4,30 +4,28 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_transitions[6][256] = {
-    /* states 0, 6 */ { 0 },
+static const uint8_t regex_transitions[7][256] = {
+    /* state 0 */ { 0 },
     /* state 1 */ { ['h'] = 4 },
     /* state 2 */ { ['l'] = 5 },
     /* state 3 */ { ['l'] = 2 },
     /* state 4 */ { ['e'] = 3 },
     /* state 5 */ { ['o'] = 6 },
-};
-
-static const uint8_t regex_row_map[7] = {
-    0, 1, 2, 3, 4, 5, 0
+    /* state 6 */ { 0 },
 };
 
 /* regex:                "hello"
  * flags:                ""
  * encoding:             utf8
  * alphabet-compression: no
- * row-deduplication:    yes
- * early-exit:           no
+ * row-deduplication:    no
+ * early-exit:           yes
  */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {
-        state = regex_transitions[regex_row_map[state]][(unsigned char)input[i]];
+        state = regex_transitions[state][(unsigned char)input[i]];
+        if (state == 0) break;
     }
     return state >= 6;
 }

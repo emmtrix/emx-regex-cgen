@@ -42,6 +42,7 @@ CASES: list[tuple[str, str, dict]] = [
     ("emit_main.c",            r"\d+",                    {"emit_main": True}),
     ("alphabet_compression.c", r"hello",                  {"alphabet_compression": "yes"}),
     ("row_dedup.c",            r"hello",                  {"row_dedup": "yes"}),
+    ("early_exit.c",           r"hello",                  {"early_exit": True}),
 ]
 
 

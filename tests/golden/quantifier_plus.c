@@ -17,6 +17,7 @@ static const uint8_t regex_transitions[5][256] = {
  * encoding:             utf8
  * alphabet-compression: no
  * row-deduplication:    no
+ * early-exit:           no
  */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;

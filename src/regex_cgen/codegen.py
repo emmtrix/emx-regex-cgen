@@ -55,6 +55,7 @@ def generate_c_code(
     pattern: str | None = None,
     flags: str = "",
     encoding: str = "utf8",
+    early_exit: bool = False,
 ) -> str:
     """Emit C code for a table-driven DFA matcher.
 
@@ -91,6 +92,9 @@ def generate_c_code(
     size_threshold:
         Number of transition-table cells (states × 256) above which
         ``"auto"`` mode enables the corresponding optimisation.
+    early_exit:
+        When ``True``, emit ``if (state == 0) break;`` inside the DFA
+        loop so matching terminates as soon as the dead state is reached.
     """
     n = dfa["num_states"]
     initial = dfa["initial"]
@@ -233,10 +237,12 @@ def generate_c_code(
         lines.append(f' * encoding:             {encoding}')
         lines.append(f' * alphabet-compression: {"yes" if do_alphabet else "no"}')
         lines.append(f' * row-deduplication:    {"yes" if do_dedup else "no"}')
+        lines.append(f' * early-exit:           {"yes" if early_exit else "no"}')
         lines.append(' */')
     else:
         lines.append(f'/* alphabet-compression: {"yes" if do_alphabet else "no"}')
         lines.append(f' * row-deduplication:    {"yes" if do_dedup else "no"}')
+        lines.append(f' * early-exit:           {"yes" if early_exit else "no"}')
         lines.append(' */')
 
     # Match function
@@ -254,6 +260,8 @@ def generate_c_code(
     lines.append(
         f"        state = {prefix}_transitions[{row_expr}][{col_expr}];"
     )
+    if early_exit:
+        lines.append("        if (state == 0) break;")
     lines.append("    }")
     lines.append(f"    return state >= {first_accept};")
     lines.append("}")
@@ -286,6 +294,7 @@ def generate(
     row_dedup: str = "auto",
     alphabet_compression: str = "auto",
     size_threshold: int = 8192,
+    early_exit: bool = False,
 ) -> str:
     """High-level API: compile *pattern* and return generated C code.
 
@@ -320,6 +329,10 @@ def generate(
         Number of transition-table cells (states × 256) above which
         ``"auto"`` mode enables the corresponding optimisation.
         Defaults to ``8192``.
+    early_exit:
+        When ``True``, emit ``if (state == 0) break;`` inside the DFA
+        loop so matching terminates as soon as the dead state is reached.
+        Defaults to ``False``.
     """
     dfa = compile_regex(pattern, flags, encoding=encoding)
     return generate_c_code(
@@ -332,4 +345,5 @@ def generate(
         pattern=pattern,
         flags=flags,
         encoding=encoding,
+        early_exit=early_exit,
     )

@@ -68,6 +68,15 @@ def main(argv: list[str] | None = None) -> None:
             "(default: 8192)"
         ),
     )
+    parser.add_argument(
+        "--early-exit",
+        choices=["yes", "no"],
+        default="no",
+        help=(
+            "Emit early-exit check inside the DFA loop: yes (break when dead "
+            "state is reached), no (always process full input; default)"
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -81,6 +90,7 @@ def main(argv: list[str] | None = None) -> None:
             row_dedup=args.row_dedup,
             alphabet_compression=args.alphabet_compression,
             size_threshold=args.size_threshold,
+            early_exit=(args.early_exit == "yes"),
         )
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
