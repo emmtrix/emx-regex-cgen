@@ -39,6 +39,17 @@ src/regex_cgen/
 - Test strategy: **generate → compile → execute → compare**.
 - Run: `pytest -n auto -q`
 
+## Golden Test Cases
+
+- Reference C files live in `tests/golden/` — one file per regex feature and CLI option.
+- They document the expected C output and are linked from the README feature table.
+- `tests/test_golden.py` asserts that `generate()` output matches every golden file exactly.
+- When the generator output changes intentionally, regenerate the files with:
+  ```bash
+  python tests/update_golden.py
+  ```
+- Add a new golden file for every new regex feature or CLI option introduced.
+
 ## Adding Support for New Regex Features
 
 1. Identify the `sre_parse` opcode(s) for the feature.

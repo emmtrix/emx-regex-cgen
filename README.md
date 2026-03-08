@@ -85,6 +85,39 @@ options:
                         sequence handling, literals/classes work byte-wise 0-255)
 ```
 
+## Supported Features
+
+### Regex Features
+
+| Feature | Example pattern | Golden reference |
+|---------|-----------------|------------------|
+| Literal string | `hello` | [literal.c](tests/golden/literal.c) |
+| Character class | `[a-z0-9_]+` | [char\_class.c](tests/golden/char_class.c) |
+| Negated class | `[^aeiou]+` | [negated\_class.c](tests/golden/negated_class.c) |
+| Dot (any char except `\n`) | `.+` | [dot.c](tests/golden/dot.c) |
+| Alternation | `cat|dog|fish` | [alternation.c](tests/golden/alternation.c) |
+| Star quantifier `*` | `ab*c` | [quantifier\_star.c](tests/golden/quantifier_star.c) |
+| Plus quantifier `+` | `ab+c` | [quantifier\_plus.c](tests/golden/quantifier_plus.c) |
+| Optional quantifier `?` | `colou?r` | [quantifier\_optional.c](tests/golden/quantifier_optional.c) |
+| Bounded repeat `{m,n}` | `a{2,4}` | [quantifier\_repeat.c](tests/golden/quantifier_repeat.c) |
+| Digit escape `\d` | `\d{4}-\d{2}-\d{2}` | [escape\_digit.c](tests/golden/escape_digit.c) |
+| Word escape `\w` | `\w+` | [escape\_word.c](tests/golden/escape_word.c) |
+| Space escape `\s` | `\s+` | [escape\_space.c](tests/golden/escape_space.c) |
+| Unicode / UTF-8 | `\x{00e9}+` | [unicode.c](tests/golden/unicode.c) |
+| Anchors `^` / `$` | `^start.*end$` | [anchors.c](tests/golden/anchors.c) |
+
+### CLI Options
+
+| Option | Effect | Golden reference |
+|--------|--------|------------------|
+| `--flags i` | Case-insensitive matching | [flag\_ignorecase.c](tests/golden/flag_ignorecase.c) |
+| `--flags s` | Dot matches `\n` (dot-all) | [flag\_dotall.c](tests/golden/flag_dotall.c) |
+| `--flags m` | Multiline anchors | [flag\_multiline.c](tests/golden/flag_multiline.c) |
+| `--flags x` | Verbose / free-spacing mode | [flag\_verbose.c](tests/golden/flag_verbose.c) |
+| `--encoding bytes` | Raw byte semantics (no UTF-8) | [encoding\_bytes.c](tests/golden/encoding_bytes.c) |
+| `--func-name NAME` | Custom match-function name | [func\_name.c](tests/golden/func_name.c) |
+| `--emit-main` | Include standalone `main()` | [emit\_main.c](tests/golden/emit_main.c) |
+
 ## Generated Code Structure
 
 The generator produces:
