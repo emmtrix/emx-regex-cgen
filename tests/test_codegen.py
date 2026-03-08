@@ -6,9 +6,9 @@ Test strategy:
 3. Execute the compiled binary with each test subject.
 4. Compare the exit code (0 = match, 1 = no match) against the expected result.
 
-Test cases are loaded from ``re2_compat_results.json`` which was produced by
-``parse_pcre2_tests.py`` from the PCRE2 test suite, filtered for re2
-compatibility.
+Test cases are loaded from ``tests/data/re2_compat_results.json`` which was
+produced by ``tests/data/parse_pcre2_tests.py`` from the PCRE2 test suite,
+filtered for re2 compatibility.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import pytest
 
 from regex_cgen import generate
 
-_JSON_FILE = Path(__file__).resolve().parent.parent / "re2_compat_results.json"
+_JSON_FILE = Path(__file__).resolve().parent / "data" / "re2_compat_results.json"
 
 
 def _load_test_params() -> list:

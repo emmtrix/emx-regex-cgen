@@ -4,17 +4,33 @@ Parse PCRE2 test cases from pcre2-org/testdata and check compatibility
 with Python's re2 (google-re2) library.
 
 Usage:
-    python parse_pcre2_tests.py > re2_compat_results.json
+    python tests/data/parse_pcre2_tests.py > tests/data/re2_compat_results.json
+
+The script will automatically clone the PCRE2 repository into
+``tests/data/pcre2/`` if it does not already exist.
 """
 
 import json
-import re
+import subprocess
 import sys
 from pathlib import Path
 
 import re2
 
-TESTDATA_DIR = Path(__file__).parent / "pcre2-org" / "testdata"
+_PCRE2_REPO = "https://github.com/PCRE2Project/pcre2"
+_PCRE2_DIR = Path(__file__).parent / "pcre2"
+TESTDATA_DIR = _PCRE2_DIR / "testdata"
+
+
+def _ensure_pcre2_cloned() -> None:
+    """Clone the PCRE2 repository if it is not already present."""
+    if _PCRE2_DIR.exists():
+        return
+    print(f"Cloning {_PCRE2_REPO} into {_PCRE2_DIR} ...", file=sys.stderr)
+    subprocess.run(
+        ["git", "clone", "--depth=1", _PCRE2_REPO, str(_PCRE2_DIR)],
+        check=True,
+    )
 
 
 def find_closing_delimiter(content, start):
@@ -193,7 +209,6 @@ def parse_test_file(filepath):
         return []
 
     test_cases = []
-    i = 0
     lines = content.splitlines(keepends=True)
 
     # Rebuild content as a single string for positional scanning
@@ -413,6 +428,7 @@ def check_re2_support(test_case):
 
 
 def main():
+    _ensure_pcre2_cloned()
     testdata_dir = TESTDATA_DIR
     if not testdata_dir.exists():
         print(
