@@ -66,8 +66,11 @@ regex-cgen --encoding bytes '[\x80-\xff]+' --emit-main -o byte_matcher.c
 ## CLI Reference
 
 ```
-usage: regex-cgen [-h] [-o OUTPUT] [--emit-main] [--func-name NAME]
-                  [--flags FLAGS] [--encoding {utf8,bytes}] pattern
+usage: regex-cgen [-h] [-o OUTPUT] [--emit-main] [--prefix PREFIX]
+                  [--flags FLAGS] [--encoding {utf8,bytes}]
+                  [--row-dedup {yes,no,auto}]
+                  [--alphabet-compression {yes,no,auto}]
+                  [--size-threshold SIZE_THRESHOLD] pattern
 
 Generate C code that performs a fullmatch for a regular expression.
 
@@ -77,12 +80,19 @@ positional arguments:
 options:
   -o, --output          Output file (default: stdout)
   --emit-main           Also emit a main() function (exit 0=match, 1=no match, 2=error)
-  --func-name NAME      Name of the generated match function (default: regex_match)
+  --prefix PREFIX       Prefix for all generated C identifiers (default: regex)
   --flags FLAGS         Regex flags: i (case-insensitive), s (dot-all), m (multiline)
   --encoding {utf8,bytes}
                         Input encoding: utf8 (default, Unicode-aware) or bytes
-                        (raw byte semantics: '.' = one arbitrary byte, no UTF-8
-                        sequence handling, literals/classes work byte-wise 0-255)
+                        (raw byte semantics)
+  --row-dedup {yes,no,auto}
+                        Transition-row deduplication: yes (always), no (never),
+                        auto (when table exceeds --size-threshold; default)
+  --alphabet-compression {yes,no,auto}
+                        Alphabet compression into equivalence classes: yes (always),
+                        no (never), auto (when table exceeds --size-threshold; default)
+  --size-threshold N    Table-size threshold (cells = states × 256) for auto mode
+                        (default: 8192)
 ```
 
 ## Supported Features
@@ -115,32 +125,50 @@ options:
 | `--flags m` | Multiline anchors | [flag\_multiline.c](tests/golden/flag_multiline.c) |
 | `--flags x` | Verbose / free-spacing mode | [flag\_verbose.c](tests/golden/flag_verbose.c) |
 | `--encoding bytes` | Raw byte semantics (no UTF-8) | [encoding\_bytes.c](tests/golden/encoding_bytes.c) |
-| `--func-name NAME` | Custom match-function name | [func\_name.c](tests/golden/func_name.c) |
+| `--prefix NAME` | Custom identifier prefix | [prefix.c](tests/golden/prefix.c) |
 | `--emit-main` | Include standalone `main()` | [emit\_main.c](tests/golden/emit_main.c) |
+| `--alphabet-compression yes` | Byte equivalence-class compression | [alphabet\_compression.c](tests/golden/alphabet_compression.c) |
+| `--row-dedup yes` | Transition-row deduplication | [row\_dedup.c](tests/golden/row_dedup.c) |
 
 ## Generated Code Structure
 
 The generator produces:
 
-1. A **transition table** (`static const uint16_t dfa_transitions[N][256]`)
-   mapping `(state, byte) → next_state`.
-2. An **accept table** (`static const bool dfa_accept[N]`) marking
-   accepting states.
-3. A **match function** with the signature:
+1. An optional **alphabet map** (`static const uint8_t regex_alphabet[256]`)
+   mapping each byte to its equivalence class (emitted when alphabet
+   compression is active).
+2. A **transition table** (`static const uint8_t regex_transitions[M][C]`)
+   mapping `(row, column) → next_state`.  Dimensions depend on active
+   optimisations: *M* is the number of unique rows (with row dedup) or
+   states; *C* is the number of equivalence classes (with alphabet
+   compression) or 256.
+3. An optional **row map** (`static const uint8_t regex_row_map[N]`)
+   mapping `state → row index` (emitted when row deduplication is active).
+4. A **match function** with the signature:
    ```c
    bool regex_match(const char *input, size_t len);
    ```
-4. Optionally a **`main()` function** for standalone executables.
+5. Optionally a **`main()` function** for standalone executables.
 
-### Example Output (pattern `a[bc]+d`)
+### Example Output (pattern `hello`, `--alphabet-compression yes --row-dedup yes`)
 
 ```c
+static const uint8_t regex_alphabet[256] = { /* byte → class */ };
+
+static const uint8_t regex_transitions[6][5] = {
+    /* states 0, 6 */ { 0 },
+    /* state 1 */     { [2] = 4 },
+    ...
+};
+
+static const uint8_t regex_row_map[7] = { 0, 1, 2, 3, 4, 5, 0 };
+
 bool regex_match(const char *input, size_t len) {
-    uint16_t state = 1;
+    uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {
-        state = dfa_transitions[state][(unsigned char)input[i]];
+        state = regex_transitions[regex_row_map[state]][regex_alphabet[(unsigned char)input[i]]];
     }
-    return dfa_accept[state];
+    return state >= 6;
 }
 ```
 
