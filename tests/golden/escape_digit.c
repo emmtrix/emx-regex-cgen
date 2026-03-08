@@ -19,6 +19,12 @@ static const uint8_t regex_transitions[12][256] = {
     /* state 11 */ { 0 },
 };
 
+/* regex:                "\d{4}-\d{2}-\d{2}"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

@@ -17,6 +17,12 @@ static const uint8_t regex_transitions[10][256] = {
     /* state 9 */ { 0 },
 };
 
+/* regex:                "cat|dog|fish"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

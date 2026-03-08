@@ -12,6 +12,12 @@ static const uint8_t regex_transitions[3][256] = {
     /* state 2 */ { ['0'] = 2, ['1'] = 2, ['2'] = 2, ['3'] = 2, ['4'] = 2, ['5'] = 2, ['6'] = 2, ['7'] = 2, ['8'] = 2, ['9'] = 2 },
 };
 
+/* regex:                "\d+"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {
