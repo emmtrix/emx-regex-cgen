@@ -10,6 +10,12 @@ static const uint8_t regex_transitions[3][256] = {
     /* state 2 */ { [9] = 2, [10] = 2, [12] = 2, [13] = 2, [' '] = 2 },
 };
 
+/* regex:                "\s+"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

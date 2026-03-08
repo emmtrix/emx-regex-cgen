@@ -11,6 +11,12 @@ static const uint8_t regex_transitions[4][256] = {
     /* state 3 */ { [195] = 2 },
 };
 
+/* regex:                "\x{00e9}+"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

@@ -52,6 +52,9 @@ def generate_c_code(
     row_dedup: str = "auto",
     alphabet_compression: str = "auto",
     size_threshold: int = 8192,
+    pattern: str | None = None,
+    flags: str = "",
+    encoding: str = "utf8",
 ) -> str:
     """Emit C code for a table-driven DFA matcher.
 
@@ -223,6 +226,19 @@ def generate_c_code(
         lines.append("};")
         lines.append("")
 
+    # Match function – parameter comment
+    if pattern is not None:
+        lines.append(f'/* regex:                "{pattern}"')
+        lines.append(f' * flags:                "{flags}"')
+        lines.append(f' * encoding:             {encoding}')
+        lines.append(f' * alphabet-compression: {"yes" if do_alphabet else "no"}')
+        lines.append(f' * row-deduplication:    {"yes" if do_dedup else "no"}')
+        lines.append(' */')
+    else:
+        lines.append(f'/* alphabet-compression: {"yes" if do_alphabet else "no"}')
+        lines.append(f' * row-deduplication:    {"yes" if do_dedup else "no"}')
+        lines.append(' */')
+
     # Match function
     col_expr = (
         f"{prefix}_alphabet[(unsigned char)input[i]]"
@@ -313,4 +329,7 @@ def generate(
         row_dedup=row_dedup,
         alphabet_compression=alphabet_compression,
         size_threshold=size_threshold,
+        pattern=pattern,
+        flags=flags,
+        encoding=encoding,
     )

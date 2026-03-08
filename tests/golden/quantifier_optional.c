@@ -15,6 +15,12 @@ static const uint8_t regex_transitions[8][256] = {
     /* state 7 */ { 0 },
 };
 
+/* regex:                "colou?r"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

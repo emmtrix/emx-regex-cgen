@@ -10,6 +10,12 @@ static const uint8_t regex_transitions[3][256] = {
     /* state 2 */ { ['0'] = 2, ['1'] = 2, ['2'] = 2, ['3'] = 2, ['4'] = 2, ['5'] = 2, ['6'] = 2, ['7'] = 2, ['8'] = 2, ['9'] = 2, ['_'] = 2, ['a'] = 2, ['b'] = 2, ['c'] = 2, ['d'] = 2, ['e'] = 2, ['f'] = 2, ['g'] = 2, ['h'] = 2, ['i'] = 2, ['j'] = 2, ['k'] = 2, ['l'] = 2, ['m'] = 2, ['n'] = 2, ['o'] = 2, ['p'] = 2, ['q'] = 2, ['r'] = 2, ['s'] = 2, ['t'] = 2, ['u'] = 2, ['v'] = 2, ['w'] = 2, ['x'] = 2, ['y'] = 2, ['z'] = 2 },
 };
 
+/* regex:                "[a-z0-9_]+"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    no
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {

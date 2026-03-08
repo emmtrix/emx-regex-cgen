@@ -17,6 +17,12 @@ static const uint8_t regex_row_map[7] = {
     0, 1, 2, 3, 4, 5, 0
 };
 
+/* regex:                "hello"
+ * flags:                ""
+ * encoding:             utf8
+ * alphabet-compression: no
+ * row-deduplication:    yes
+ */
 bool regex_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {
