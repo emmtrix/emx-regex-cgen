@@ -64,11 +64,40 @@ def generate_c_code(
         state_to_row.append(row_index[row])
 
     num_unique = len(unique_rows)
+
+    # Build reverse mapping: row index → list of states that use it
+    row_to_states: list[list[int]] = [[] for _ in range(num_unique)]
+    for s, r in enumerate(state_to_row):
+        row_to_states[r].append(s)
+
     lines.append(
         f"static const {state_t} {prefix}_transitions[{num_unique}][256] = {{"
     )
-    for row in unique_rows:
-        lines.append(f"    {{{', '.join(str(v) for v in row)}}},")
+    for row_idx, row in enumerate(unique_rows):
+        states = row_to_states[row_idx]
+        if len(states) == 1:
+            comment = f"/* state {states[0]} */"
+        else:
+            comment = f"/* states {', '.join(str(s) for s in states)} */"
+        non_zero = [(b, v) for b, v in enumerate(row) if v != 0]
+        if not non_zero:
+            row_str = "{ 0 }"
+        else:
+            entries = []
+            for b, v in non_zero:
+                if 32 <= b <= 126:
+                    c = chr(b)
+                    if c == "'":
+                        idx = "['\\'']"
+                    elif c == "\\":
+                        idx = "['\\\\']"
+                    else:
+                        idx = f"['{c}']"
+                else:
+                    idx = f"[{b}]"
+                entries.append(f"{idx} = {v}")
+            row_str = "{ " + ", ".join(entries) + " }"
+        lines.append(f"    {comment} {row_str},")
     lines.append("};")
     lines.append("")
 
