@@ -1,8 +1,8 @@
-"""Generate C source code from a compiled DFA."""
+"""Generate C source code from a compiled DFA or bit-parallel NFA."""
 
 from __future__ import annotations
 
-from .compiler import compile_regex
+from .compiler import compile_nfa, compile_regex
 
 
 def _should_apply(mode: str, table_size: int, threshold: int) -> bool:
@@ -291,6 +291,7 @@ def generate(
     emit_main: bool = False,
     prefix: str = "regex",
     encoding: str = "utf8",
+    engine: str = "dfa",
     row_dedup: str = "auto",
     alphabet_compression: str = "auto",
     size_threshold: int = 8192,
@@ -317,23 +318,39 @@ def generate(
         ``"utf8"`` (default) for Unicode/UTF-8 semantics; ``"bytes"`` for
         raw byte semantics where ``.`` matches any single byte and
         literals/classes operate on byte values 0-255.
+    engine:
+        ``"dfa"`` (default) uses the table-driven minimised-DFA backend.
+        ``"bitnfa"`` uses a bit-parallel NFA backend.
     row_dedup:
         ``"yes"`` always deduplicate identical transition rows,
         ``"no"`` never, ``"auto"`` (default) only when the uncompressed
-        table exceeds *size_threshold* cells.
+        table exceeds *size_threshold* cells.  (DFA only.)
     alphabet_compression:
         ``"yes"`` always compress the byte alphabet into equivalence
         classes, ``"no"`` never, ``"auto"`` (default) only when the
-        uncompressed table exceeds *size_threshold* cells.
+        uncompressed table exceeds *size_threshold* cells.  (DFA only.)
     size_threshold:
         Number of transition-table cells (states × 256) above which
         ``"auto"`` mode enables the corresponding optimisation.
-        Defaults to ``8192``.
+        Defaults to ``8192``.  (DFA only.)
     early_exit:
         When ``True``, emit ``if (state == 0) break;`` inside the DFA
         loop so matching terminates as soon as the dead state is reached.
-        Defaults to ``False``.
+        Defaults to ``False``.  (DFA only.)
     """
+    if engine == "bitnfa":
+        from .codegen_bitnfa import generate_bitnfa_c_code
+
+        nfa = compile_nfa(pattern, flags, encoding=encoding)
+        return generate_bitnfa_c_code(
+            nfa,
+            prefix=prefix,
+            emit_main=emit_main,
+            pattern=pattern,
+            flags=flags,
+            encoding=encoding,
+        )
+
     dfa = compile_regex(pattern, flags, encoding=encoding)
     return generate_c_code(
         dfa,

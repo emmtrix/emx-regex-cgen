@@ -77,6 +77,15 @@ def main(argv: list[str] | None = None) -> None:
             "state is reached), no (always process full input; default)"
         ),
     )
+    parser.add_argument(
+        "--engine",
+        choices=["dfa", "bitnfa"],
+        default="dfa",
+        help=(
+            "Backend engine: dfa (table-driven minimised DFA; default), "
+            "bitnfa (bit-parallel NFA)"
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -87,6 +96,7 @@ def main(argv: list[str] | None = None) -> None:
             emit_main=args.emit_main,
             prefix=args.prefix,
             encoding=args.encoding,
+            engine=args.engine,
             row_dedup=args.row_dedup,
             alphabet_compression=args.alphabet_compression,
             size_threshold=args.size_threshold,

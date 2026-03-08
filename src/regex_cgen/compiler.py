@@ -1018,20 +1018,10 @@ def _preprocess_pattern(pattern: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def compile_regex(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
-    """Compile *pattern* to a minimised, renumbered DFA.
-
-    Returns a dict with ``num_states``, ``initial``, ``accept``, and
-    ``transitions`` keys.
-
-    Parameters
-    ----------
-    encoding:
-        ``"utf8"`` (default) treats the input as UTF-8 text; ``.`` matches
-        one Unicode code point and character classes are Unicode-aware.
-        ``"bytes"`` uses pure byte semantics: ``.`` matches one arbitrary
-        byte and all literals/classes operate on raw byte values (0-255).
-    """
+def _build_nfa(
+    pattern: str, flags: str = "", encoding: str = "utf8"
+) -> tuple[NFABuilder, int, int]:
+    """Shared front-end: parse *pattern* and build a Thompson NFA."""
     if encoding not in ("utf8", "bytes"):
         raise ValueError(f"encoding must be 'utf8' or 'bytes', got {encoding!r}")
     re_flags = 0
@@ -1055,9 +1045,72 @@ def compile_regex(pattern: str, flags: str = "", encoding: str = "utf8") -> dict
 
     builder = NFABuilder(case_insensitive=ci, dot_all=da, bytes_mode=(encoding == "bytes"))
     start, accept = builder.build(parsed)
+    return builder, start, accept
+
+
+def compile_regex(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
+    """Compile *pattern* to a minimised, renumbered DFA.
+
+    Returns a dict with ``num_states``, ``initial``, ``accept``, and
+    ``transitions`` keys.
+
+    Parameters
+    ----------
+    encoding:
+        ``"utf8"`` (default) treats the input as UTF-8 text; ``.`` matches
+        one Unicode code point and character classes are Unicode-aware.
+        ``"bytes"`` uses pure byte semantics: ``.`` matches one arbitrary
+        byte and all literals/classes operate on raw byte values (0-255).
+    """
+    builder, start, accept = _build_nfa(pattern, flags, encoding)
 
     dfa = _nfa_to_dfa(builder, start, accept)
     dfa = _add_dead_state(dfa)
     dfa = _minimize_dfa(dfa)
     dfa = _renumber(dfa)
     return dfa
+
+
+def compile_nfa(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
+    """Compile *pattern* to NFA data for bit-parallel simulation.
+
+    Returns a dict with:
+
+    * ``num_positions`` – total number of NFA states (bit-positions).
+    * ``initial`` – Python int bitset of initially active positions.
+    * ``accept`` – Python int bitset for the accept position.
+    * ``trans_masks`` – list of length *num_positions*; each entry is a
+      ``dict[int, int]`` mapping byte values to destination bitsets.
+    """
+    builder, start, accept = _build_nfa(pattern, flags, encoding)
+
+    num_positions = builder._next
+
+    # Epsilon closure of start state → initial bitset
+    initial_closure = _epsilon_closure({start}, builder.epsilon)
+    initial_bits = 0
+    for s in initial_closure:
+        initial_bits |= 1 << s
+
+    accept_bits = 1 << accept
+
+    # For each position, compute transition masks: byte → dest bitset
+    trans_masks: list[dict[int, int]] = []
+    for p in range(num_positions):
+        masks: dict[int, int] = {}
+        for b in range(256):
+            dests = builder.transitions.get((p, b), set())
+            if dests:
+                closure = _epsilon_closure(dests, builder.epsilon)
+                bits = 0
+                for s in closure:
+                    bits |= 1 << s
+                masks[b] = bits
+        trans_masks.append(masks)
+
+    return {
+        "num_positions": num_positions,
+        "initial": initial_bits,
+        "accept": accept_bits,
+        "trans_masks": trans_masks,
+    }
