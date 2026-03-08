@@ -49,15 +49,38 @@ def generate_c_code(
         lines.append("#include <stdio.h>")
     lines.append("")
 
-    # Transition table
-    lines.append(
-        f"static const {state_t} dfa_transitions[{n}][256] = {{"
-    )
+    # Transition table – deduplicate identical rows
+    unique_rows: list[tuple[int, ...]] = []
+    row_index: dict[tuple[int, ...], int] = {}
+    state_to_row: list[int] = []
     for s in range(n):
-        row = [str(trans.get((s, b), 0)) for b in range(256)]
-        lines.append(f"    {{{', '.join(row)}}},")
+        row = tuple(trans.get((s, b), 0) for b in range(256))
+        if row not in row_index:
+            row_index[row] = len(unique_rows)
+            unique_rows.append(row)
+        state_to_row.append(row_index[row])
+
+    num_unique = len(unique_rows)
+    lines.append(
+        f"static const {state_t} dfa_transitions[{num_unique}][256] = {{"
+    )
+    for row in unique_rows:
+        lines.append(f"    {{{', '.join(str(v) for v in row)}}},")
     lines.append("};")
     lines.append("")
+
+    # Row-index map: state → index into dfa_transitions (only when needed)
+    if num_unique < n:
+        if num_unique <= 256:
+            row_t = "uint8_t"
+        elif num_unique <= 65536:
+            row_t = "uint16_t"
+        else:
+            row_t = "uint32_t"
+        lines.append(f"static const {row_t} dfa_row_map[{n}] = {{")
+        lines.append(f"    {', '.join(str(i) for i in state_to_row)}")
+        lines.append("};")
+        lines.append("")
 
     # Accept table
     accept_vals = ["true" if s in accept else "false" for s in range(n)]
@@ -70,9 +93,14 @@ def generate_c_code(
     lines.append(f"bool {func_name}(const char *input, size_t len) {{")
     lines.append(f"    {state_t} state = {initial};")
     lines.append("    for (size_t i = 0; i < len; i++) {")
-    lines.append(
-        "        state = dfa_transitions[state][(unsigned char)input[i]];"
-    )
+    if num_unique < n:
+        lines.append(
+            "        state = dfa_transitions[dfa_row_map[state]][(unsigned char)input[i]];"
+        )
+    else:
+        lines.append(
+            "        state = dfa_transitions[state][(unsigned char)input[i]];"
+        )
     lines.append("    }")
     lines.append("    return dfa_accept[state];")
     lines.append("}")
