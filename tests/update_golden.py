@@ -35,7 +35,7 @@ CASES: list[tuple[str, str, dict]] = [
     ("flag_multiline.c",       r"[a-z]+",                 {"flags": "m"}),
     ("flag_verbose.c",         r"(?x) [a-z]+ # letters", {"flags": "x"}),
     ("encoding_bytes.c",       r"[\x80-\xff]+",           {"encoding": "bytes"}),
-    ("func_name.c",            r"[a-z]+",                 {"func_name": "is_lower"}),
+    ("prefix.c",               r"[a-z]+",                 {"prefix": "my_matcher"}),
     ("emit_main.c",            r"\d+",                    {"emit_main": True}),
 ]
 

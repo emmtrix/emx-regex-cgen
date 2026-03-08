@@ -26,9 +26,9 @@ def main(argv: list[str] | None = None) -> None:
         help="Also emit a main() function (exit 0=match, 1=no match, 2=error)",
     )
     parser.add_argument(
-        "--func-name",
-        default="regex_match",
-        help="Name of the generated match function (default: regex_match)",
+        "--prefix",
+        default="regex",
+        help="Prefix for all generated C identifiers: arrays and match function (default: regex)",
     )
     parser.add_argument(
         "--flags",
@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> None:
             args.pattern,
             flags=args.flags,
             emit_main=args.emit_main,
-            func_name=args.func_name,
+            prefix=args.prefix,
             encoding=args.encoding,
         )
     except Exception as exc:
