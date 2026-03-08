@@ -8,13 +8,20 @@ static C code for embedded and performance-critical applications.
 
 ## Key Characteristics
 
-- **Table-driven DFA** — every regex is compiled to a minimised
+- **Two backend engines** — choose between a table-driven **DFA** and a
+  bit-parallel **NFA** (`--engine dfa` or `--engine bitnfa`).
+- **Table-driven DFA** (default) — every regex is compiled to a minimised
   deterministic finite automaton; the generated C code performs a single
   linear scan over the input.
+- **Bit-parallel NFA** — the regex is compiled to a Thompson NFA and
+  simulated with precomputed bitmasks; the hot loop is fully unrolled
+  with no loops over words. The variant (`uint8`, `uint16`, `uint32`,
+  or `uint32_t[N]`) is selected automatically based on the number of
+  NFA positions.
 - **No dynamic memory allocation** — all data is `static const`; no
   `malloc`, no `free`.
 - **Branch-free inner loop** — the matching loop contains a single table
-  lookup per byte, making it highly suitable for auto-vectorisation.
+  lookup per byte (DFA) or unrolled bitwise operations (bitnfa).
 - **re2 feature set** — supports the same subset of regular expressions
   as Google's [re2](https://github.com/google/re2) library (no
   back-references, no look-around).
@@ -34,7 +41,7 @@ pip install -e ".[dev]"
 ```python
 from regex_cgen import generate
 
-# Generate a match function (UTF-8 mode, default)
+# Generate a match function (UTF-8 mode, default DFA engine)
 c_code = generate(r"\d{4}-\d{2}-\d{2}")
 print(c_code)
 
@@ -43,6 +50,9 @@ c_code = generate(r"[a-z]+", emit_main=True)
 
 # Bytes mode: '.' matches any single byte, classes work on raw byte values
 c_code = generate(r"[\x80-\xff]+", encoding="bytes")
+
+# Use the bit-parallel NFA backend instead of DFA
+c_code = generate(r"hello", engine="bitnfa")
 ```
 
 ### CLI
@@ -61,6 +71,9 @@ gcc -O2 -o matcher matcher.c
 
 # Bytes mode: match any sequence of high bytes
 regex-cgen --encoding bytes '[\x80-\xff]+' --emit-main -o byte_matcher.c
+
+# Use the bit-parallel NFA backend
+regex-cgen --engine bitnfa 'hello' --emit-main -o bitnfa_matcher.c
 ```
 
 ## CLI Reference
@@ -68,6 +81,7 @@ regex-cgen --encoding bytes '[\x80-\xff]+' --emit-main -o byte_matcher.c
 ```
 usage: regex-cgen [-h] [-o OUTPUT] [--emit-main] [--prefix PREFIX]
                   [--flags FLAGS] [--encoding {utf8,bytes}]
+                  [--engine {dfa,bitnfa}]
                   [--row-dedup {yes,no,auto}]
                   [--alphabet-compression {yes,no,auto}]
                   [--size-threshold SIZE_THRESHOLD]
@@ -86,56 +100,74 @@ options:
   --encoding {utf8,bytes}
                         Input encoding: utf8 (default, Unicode-aware) or bytes
                         (raw byte semantics)
+  --engine {dfa,bitnfa}
+                        Backend engine: dfa (table-driven minimised DFA; default),
+                        bitnfa (bit-parallel NFA)
   --row-dedup {yes,no,auto}
                         Transition-row deduplication: yes (always), no (never),
-                        auto (when table exceeds --size-threshold; default)
+                        auto (when table exceeds --size-threshold; default). DFA only.
   --alphabet-compression {yes,no,auto}
                         Alphabet compression into equivalence classes: yes (always),
-                        no (never), auto (when table exceeds --size-threshold; default)
+                        no (never), auto (when table exceeds --size-threshold; default).
+                        DFA only.
   --size-threshold N    Table-size threshold (cells = states × 256) for auto mode
-                        (default: 8192)
+                        (default: 8192). DFA only.
   --early-exit {yes,no}
                         Emit early-exit check in DFA loop: yes (break when dead state
-                        is reached), no (always process full input; default)
+                        is reached), no (always process full input; default). DFA only.
 ```
 
 ## Supported Features
 
 ### Regex Features
 
-| Feature | Example pattern | Golden reference |
-|---------|-----------------|------------------|
-| Literal string | `hello` | [literal.c](tests/golden/literal.c) |
-| Character class | `[a-z0-9_]+` | [char\_class.c](tests/golden/char_class.c) |
-| Negated class | `[^aeiou]+` | [negated\_class.c](tests/golden/negated_class.c) |
-| Dot (any char except `\n`) | `.+` | [dot.c](tests/golden/dot.c) |
-| Alternation | `cat|dog|fish` | [alternation.c](tests/golden/alternation.c) |
-| Star quantifier `*` | `ab*c` | [quantifier\_star.c](tests/golden/quantifier_star.c) |
-| Plus quantifier `+` | `ab+c` | [quantifier\_plus.c](tests/golden/quantifier_plus.c) |
-| Optional quantifier `?` | `colou?r` | [quantifier\_optional.c](tests/golden/quantifier_optional.c) |
-| Bounded repeat `{m,n}` | `a{2,4}` | [quantifier\_repeat.c](tests/golden/quantifier_repeat.c) |
-| Digit escape `\d` | `\d{4}-\d{2}-\d{2}` | [escape\_digit.c](tests/golden/escape_digit.c) |
-| Word escape `\w` | `\w+` | [escape\_word.c](tests/golden/escape_word.c) |
-| Space escape `\s` | `\s+` | [escape\_space.c](tests/golden/escape_space.c) |
-| Unicode / UTF-8 | `\x{00e9}+` | [unicode.c](tests/golden/unicode.c) |
-| Anchors `^` / `$` | `^start.*end$` | [anchors.c](tests/golden/anchors.c) |
+| Feature | Example pattern | DFA | bitnfa |
+|---------|-----------------|-----|--------|
+| Literal string | `hello` | [literal.c](tests/golden/literal.c) | [literal\_bitnfa.c](tests/golden/literal_bitnfa.c) |
+| Character class | `[a-z0-9_]+` | [char\_class.c](tests/golden/char_class.c) | [char\_class\_bitnfa.c](tests/golden/char_class_bitnfa.c) |
+| Negated class | `[^aeiou]+` | [negated\_class.c](tests/golden/negated_class.c) | [negated\_class\_bitnfa.c](tests/golden/negated_class_bitnfa.c) |
+| Dot (any char except `\n`) | `.+` | [dot.c](tests/golden/dot.c) | [dot\_bitnfa.c](tests/golden/dot_bitnfa.c) |
+| Alternation | `cat\|dog\|fish` | [alternation.c](tests/golden/alternation.c) | [alternation\_bitnfa.c](tests/golden/alternation_bitnfa.c) |
+| Star quantifier `*` | `ab*c` | [quantifier\_star.c](tests/golden/quantifier_star.c) | [quantifier\_star\_bitnfa.c](tests/golden/quantifier_star_bitnfa.c) |
+| Plus quantifier `+` | `ab+c` | [quantifier\_plus.c](tests/golden/quantifier_plus.c) | [quantifier\_plus\_bitnfa.c](tests/golden/quantifier_plus_bitnfa.c) |
+| Optional quantifier `?` | `colou?r` | [quantifier\_optional.c](tests/golden/quantifier_optional.c) | [quantifier\_optional\_bitnfa.c](tests/golden/quantifier_optional_bitnfa.c) |
+| Bounded repeat `{m,n}` | `a{2,4}` | [quantifier\_repeat.c](tests/golden/quantifier_repeat.c) | [quantifier\_repeat\_bitnfa.c](tests/golden/quantifier_repeat_bitnfa.c) |
+| Digit escape `\d` | `\d{4}-\d{2}-\d{2}` | [escape\_digit.c](tests/golden/escape_digit.c) | [escape\_digit\_bitnfa.c](tests/golden/escape_digit_bitnfa.c) |
+| Word escape `\w` | `\w+` | [escape\_word.c](tests/golden/escape_word.c) | [escape\_word\_bitnfa.c](tests/golden/escape_word_bitnfa.c) |
+| Space escape `\s` | `\s+` | [escape\_space.c](tests/golden/escape_space.c) | [escape\_space\_bitnfa.c](tests/golden/escape_space_bitnfa.c) |
+| Unicode / UTF-8 | `\x{00e9}+` | [unicode.c](tests/golden/unicode.c) | [unicode\_bitnfa.c](tests/golden/unicode_bitnfa.c) |
+| Anchors `^` / `$` | `^start.*end$` | [anchors.c](tests/golden/anchors.c) | [anchors\_bitnfa.c](tests/golden/anchors_bitnfa.c) |
 
 ### CLI Options
 
 | Option | Effect | Golden reference |
 |--------|--------|------------------|
-| `--flags i` | Case-insensitive matching | [flag\_ignorecase.c](tests/golden/flag_ignorecase.c) |
-| `--flags s` | Dot matches `\n` (dot-all) | [flag\_dotall.c](tests/golden/flag_dotall.c) |
-| `--flags m` | Multiline anchors | [flag\_multiline.c](tests/golden/flag_multiline.c) |
-| `--flags x` | Verbose / free-spacing mode | [flag\_verbose.c](tests/golden/flag_verbose.c) |
-| `--encoding bytes` | Raw byte semantics (no UTF-8) | [encoding\_bytes.c](tests/golden/encoding_bytes.c) |
-| `--prefix NAME` | Custom identifier prefix | [prefix.c](tests/golden/prefix.c) |
-| `--emit-main` | Include standalone `main()` | [emit\_main.c](tests/golden/emit_main.c) |
+| `--flags i` | Case-insensitive matching | [flag\_ignorecase.c](tests/golden/flag_ignorecase.c) · [bitnfa](tests/golden/flag_ignorecase_bitnfa.c) |
+| `--flags s` | Dot matches `\n` (dot-all) | [flag\_dotall.c](tests/golden/flag_dotall.c) · [bitnfa](tests/golden/flag_dotall_bitnfa.c) |
+| `--flags m` | Multiline anchors | [flag\_multiline.c](tests/golden/flag_multiline.c) · [bitnfa](tests/golden/flag_multiline_bitnfa.c) |
+| `--flags x` | Verbose / free-spacing mode | [flag\_verbose.c](tests/golden/flag_verbose.c) · [bitnfa](tests/golden/flag_verbose_bitnfa.c) |
+| `--encoding bytes` | Raw byte semantics (no UTF-8) | [encoding\_bytes.c](tests/golden/encoding_bytes.c) · [bitnfa](tests/golden/encoding_bytes_bitnfa.c) |
+| `--prefix NAME` | Custom identifier prefix | [prefix.c](tests/golden/prefix.c) · [bitnfa](tests/golden/prefix_bitnfa.c) |
+| `--emit-main` | Include standalone `main()` | [emit\_main.c](tests/golden/emit_main.c) · [bitnfa](tests/golden/emit_main_bitnfa.c) |
 | `--alphabet-compression yes` | Byte equivalence-class compression | [alphabet\_compression.c](tests/golden/alphabet_compression.c) |
 | `--row-dedup yes` | Transition-row deduplication | [row\_dedup.c](tests/golden/row_dedup.c) |
 | `--early-exit yes` | Break DFA loop on dead state (early exit) | [early\_exit.c](tests/golden/early_exit.c) |
 
+### Bit-NFA Variants
+
+The `bitnfa` engine automatically selects the narrowest integer type
+that can hold all NFA positions:
+
+| Variant | NFA positions | Golden reference |
+|---------|---------------|------------------|
+| `uint8_t` | ≤ 8 | [bitnfa\_uint8.c](tests/golden/bitnfa_uint8.c) |
+| `uint16_t` | ≤ 16 | [bitnfa\_uint16.c](tests/golden/bitnfa_uint16.c) |
+| `uint32_t` | ≤ 32 | [bitnfa\_uint32.c](tests/golden/bitnfa_uint32.c) |
+| `uint32_t[N]` | > 32 | [bitnfa\_uint32\_array.c](tests/golden/bitnfa_uint32_array.c) |
+
 ## Generated Code Structure
+
+### DFA Engine (default)
 
 The generator produces:
 
@@ -155,7 +187,7 @@ The generator produces:
    ```
 5. Optionally a **`main()` function** for standalone executables.
 
-### Example Output (pattern `hello`, `--alphabet-compression yes --row-dedup yes`)
+#### Example Output (pattern `hello`, `--alphabet-compression yes --row-dedup yes`)
 
 ```c
 static const uint8_t regex_alphabet[256] = { /* byte → class */ };
@@ -177,6 +209,46 @@ bool regex_match(const char *input, size_t len) {
 }
 ```
 
+### Bit-NFA Engine (`--engine bitnfa`)
+
+The generator produces:
+
+1. A **transition mask table**
+   (`static const uint16_t regex_trans[P][256]`) where *P* is the number
+   of NFA positions.  Each entry is a bitmask of destination positions
+   for the given (source position, input byte) pair.  The integer width
+   (`uint8_t` / `uint16_t` / `uint32_t` / `uint32_t[N]`) is chosen
+   automatically.
+2. A **match function** with a fully unrolled inner loop — one
+   `if (state & bit) next |= table[pos][b];` per active position.
+3. Optionally a **`main()` function** for standalone executables.
+
+#### Example Output (pattern `hello`, `--engine bitnfa`)
+
+```c
+static const uint16_t regex_trans[10][256] = {
+    /* position 0 */ { ['h'] = 0x0006u },
+    /* position 1 */ { 0 },
+    /* position 2 */ { ['e'] = 0x0018u },
+    ...
+};
+
+bool regex_match(const char *input, size_t len) {
+    uint16_t state = 0x0001u;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char b = (unsigned char)input[i];
+        uint16_t next = 0;
+        if (state & 0x0001u) next |= regex_trans[0][b];
+        if (state & 0x0004u) next |= regex_trans[2][b];
+        if (state & 0x0010u) next |= regex_trans[4][b];
+        if (state & 0x0040u) next |= regex_trans[6][b];
+        if (state & 0x0100u) next |= regex_trans[8][b];
+        state = next;
+    }
+    return (state & 0x0200u) != 0;
+}
+```
+
 ## Compilation Pipeline
 
 ```
@@ -188,14 +260,16 @@ Regex pattern (string)
         ▼
    Thompson NFA
         │
-        ▼
-   Subset-construction DFA
-        │
-        ▼
-   Hopcroft-minimised DFA
-        │
-        ▼
-   Table-driven C code
+        ├──────────────────────────────┐
+        │  --engine dfa (default)      │  --engine bitnfa
+        ▼                              ▼
+   Subset-construction DFA      Bit-parallel NFA
+        │                        (precomputed masks)
+        ▼                              │
+   Hopcroft-minimised DFA             │
+        │                              │
+        ▼                              ▼
+   Table-driven C code          Unrolled bitwise C code
 ```
 
 ## Testing
