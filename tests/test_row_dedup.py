@@ -87,6 +87,7 @@ def test_dedup_no_row_map_when_all_rows_unique() -> None:
         "num_states": 2,
         "initial": 1,
         "accept": {1},
+        "first_accept": 1,
         "transitions": {
             (0, ord("a")): 1,
             (1, ord("b")): 0,

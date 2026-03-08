@@ -13,14 +13,10 @@ static const uint8_t my_matcher_row_map[3] = {
     0, 1, 1
 };
 
-static const bool my_matcher_accept[3] = {
-    false, false, true
-};
-
 bool my_matcher_match(const char *input, size_t len) {
     uint8_t state = 1;
     for (size_t i = 0; i < len; i++) {
         state = my_matcher_transitions[my_matcher_row_map[state]][(unsigned char)input[i]];
     }
-    return my_matcher_accept[state];
+    return state >= 2;
 }

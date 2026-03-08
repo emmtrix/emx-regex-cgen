@@ -884,7 +884,12 @@ def _minimize_dfa(dfa: dict) -> dict:
 
 
 def _renumber(dfa: dict) -> dict:
-    """Renumber so that dead-state = 0 and initial-state = 1."""
+    """Renumber states so that dead-state = 0, initial-state = 1, and all
+    accepting states are grouped at the end (indices >= *first_accept*).
+
+    This ordering allows the generated C matcher to use the efficient test
+    ``return state >= first_accept;`` instead of a boolean lookup table.
+    """
     n = dfa["num_states"]
     trans = dfa["transitions"]
     accept = dfa["accept"]
@@ -901,12 +906,26 @@ def _renumber(dfa: dict) -> dict:
 
     mapping: dict[int, int] = {}
     nxt = 0
+    # 1. dead state → 0
     if dead is not None:
         mapping[dead] = 0
         nxt = 1
+    # 2. initial state (if non-accepting) → next slot
+    if initial not in mapping and initial not in accept:
+        mapping[initial] = nxt
+        nxt += 1
+    # 3. remaining non-accepting states
+    for s in range(n):
+        if s not in mapping and s not in accept:
+            mapping[s] = nxt
+            nxt += 1
+    # All states with index < first_accept are non-accepting.
+    first_accept = nxt
+    # 4. initial state (if accepting) → first accepting slot
     if initial not in mapping:
         mapping[initial] = nxt
         nxt += 1
+    # 5. remaining accepting states
     for s in range(n):
         if s not in mapping:
             mapping[s] = nxt
@@ -923,6 +942,7 @@ def _renumber(dfa: dict) -> dict:
         "num_states": n,
         "initial": mapping[initial],
         "accept": new_accept,
+        "first_accept": first_accept,
         "transitions": new_trans,
     }
 

@@ -16,10 +16,13 @@ def generate_c_code(
     The generated code contains:
 
     * A ``static const`` transition table (``{prefix}_transitions``).
-    * A ``static const`` accept-state table (``{prefix}_accept``).
     * A match function named ``{prefix}_match`` with the signature::
 
           bool {prefix}_match(const char *input, size_t len);
+
+    States are ordered so that all accepting states have indices >=
+    ``first_accept``; the match function uses ``return state >= first_accept;``
+    as the acceptance test (no boolean lookup table required).
 
     When *emit_main* is ``True`` an additional ``main`` function is emitted
     that reads ``argv[1]`` and returns exit-code **0** on match, **1** on
@@ -27,7 +30,7 @@ def generate_c_code(
     """
     n = dfa["num_states"]
     initial = dfa["initial"]
-    accept = dfa["accept"]
+    first_accept = dfa["first_accept"]
     trans = dfa["transitions"]
 
     # Choose the narrowest unsigned type that fits
@@ -82,13 +85,6 @@ def generate_c_code(
         lines.append("};")
         lines.append("")
 
-    # Accept table
-    accept_vals = ["true" if s in accept else "false" for s in range(n)]
-    lines.append(f"static const bool {prefix}_accept[{n}] = {{")
-    lines.append(f"    {', '.join(accept_vals)}")
-    lines.append("};")
-    lines.append("")
-
     # Match function
     func_name = f"{prefix}_match"
     lines.append(f"bool {func_name}(const char *input, size_t len) {{")
@@ -104,7 +100,7 @@ def generate_c_code(
             f"        state = {prefix}_transitions[state][(unsigned char)input[i]];"
         )
     lines.append("    }")
-    lines.append(f"    return {prefix}_accept[state];")
+    lines.append(f"    return state >= {first_accept};")
     lines.append("}")
 
     if emit_main:
@@ -147,7 +143,7 @@ def generate(
         and returns exit-code 0/1/2.
     prefix:
         Prefix for all generated C identifiers: arrays are named
-        ``{prefix}_transitions``, ``{prefix}_row_map``, ``{prefix}_accept``
+        ``{prefix}_transitions``, ``{prefix}_row_map``
         and the match function is named ``{prefix}_match``.
         Defaults to ``"regex"``.
     encoding:
