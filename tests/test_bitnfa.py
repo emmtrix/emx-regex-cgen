@@ -234,6 +234,9 @@ def test_uint16_correctness(
         ("abcdefghijklmnopq", "abcdefghijklmnopqr", False),
         ("abcdefghijklmnopq", "", False),
         ("[a-z]{20}", "abcdefghijklmnopqrst", True),
+        ("cat|dog|fish|bird|snake|horse", "cat", True),
+        ("cat|dog|fish|bird|snake|horse", "horse", True),
+        ("cat|dog|fish|bird|snake|horse", "lion", False),
     ],
 )
 def test_uint32_correctness(

@@ -1122,7 +1122,7 @@ def _reduce_to_position_nfa(
             accept_bits |= 1 << old_to_new[s]
 
     # -- Step 4: transition masks using only the reduced position set
-    trans_masks: list[dict[int, int]] = [{}] * num_positions
+    trans_masks: list[dict[int, int]] = [{} for _ in range(num_positions)]
     for old_s in all_positions:
         new_pos = old_to_new[old_s]
         masks: dict[int, int] = {}
