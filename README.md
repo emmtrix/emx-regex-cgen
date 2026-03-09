@@ -38,21 +38,33 @@ pip install -e ".[dev]"
 
 ### Python Library
 
+`generate()` returns a `GeneratedCode` object with four parts.
+Call `.render()` to get the combined C source string, or access individual
+fields to embed them in an existing code-generation pipeline.
+
 ```python
 from regex_cgen import generate
 
-# Generate a match function (UTF-8 mode, default DFA engine)
-c_code = generate(r"\d{4}-\d{2}-\d{2}")
-print(c_code)
+# generate() returns a GeneratedCode object
+result = generate(r"\d{4}-\d{2}-\d{2}")
+
+# .render() assembles the complete C source (same output as before)
+print(result.render())
+
+# Access individual parts:
+result.includes        # ['stddef.h', 'stdbool.h', 'stdint.h']
+result.globals         # static const transition table (and optional maps)
+result.match_function  # bool regex_match(const char *input, size_t len) { … }
+result.main_function   # int main(…) { … }  — None when emit_main=False
 
 # Include a main() for standalone testing
-c_code = generate(r"[a-z]+", emit_main=True)
+result = generate(r"[a-z]+", emit_main=True)
 
 # Bytes mode: '.' matches any single byte, classes work on raw byte values
-c_code = generate(r"[\x80-\xff]+", encoding="bytes")
+result = generate(r"[\x80-\xff]+", encoding="bytes")
 
 # Use the bit-parallel NFA backend instead of DFA
-c_code = generate(r"hello", engine="bitnfa")
+result = generate(r"hello", engine="bitnfa")
 ```
 
 ### CLI
