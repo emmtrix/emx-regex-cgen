@@ -23,7 +23,7 @@ from regex_cgen import generate
 
 def _build(pattern: str, tmp_path: Path, encoding: str = "utf8", flags: str = "") -> Path:
     """Generate, write and compile a C matcher; return the executable path."""
-    c_code = generate(pattern, flags=flags, emit_main=True, encoding=encoding)
+    c_code = generate(pattern, flags=flags, emit_main=True, encoding=encoding).render()
     c_file = tmp_path / "test.c"
     c_file.write_text(c_code)
     exe = tmp_path / "test"

@@ -25,7 +25,7 @@ from regex_cgen.compiler import compile_regex
 
 def _build(pattern: str, tmp_path: Path, flags: str = "", **kwargs) -> Path:
     """Generate, write and compile a C matcher; return the executable path."""
-    c_code = generate(pattern, flags=flags, emit_main=True, **kwargs)
+    c_code = generate(pattern, flags=flags, emit_main=True, **kwargs).render()
     c_file = tmp_path / "test.c"
     c_file.write_text(c_code)
     exe = tmp_path / "test"
@@ -55,7 +55,7 @@ def test_dedup_emits_row_map_when_duplicates_exist() -> None:
     # all-zero transition row; deduplication should kick in.
     dfa = compile_regex("a[bc]+d")
     n = dfa["num_states"]
-    code = generate_c_code(dfa, row_dedup="yes")
+    code = generate_c_code(dfa, row_dedup="yes").render()
 
     # Declaration must be present, sized correctly
     assert re.search(rf"regex_row_map\[{n}\]", code), (
@@ -71,7 +71,7 @@ def test_dedup_reduces_table_rows() -> None:
     """The emitted regex_transitions must have fewer rows than num_states."""
     dfa = compile_regex("a[bc]+d")
     n = dfa["num_states"]
-    code = generate_c_code(dfa, row_dedup="yes")
+    code = generate_c_code(dfa, row_dedup="yes").render()
     # Extract the dimension from the table declaration, e.g. "regex_transitions[4][256]"
     m = re.search(r"regex_transitions\[(\d+)\]\[256\]", code)
     assert m is not None
@@ -93,7 +93,7 @@ def test_dedup_no_row_map_when_all_rows_unique() -> None:
             (1, ord("b")): 0,
         },
     }
-    code = generate_c_code(dfa, row_dedup="yes")
+    code = generate_c_code(dfa, row_dedup="yes").render()
     assert "regex_row_map" not in code
 
 

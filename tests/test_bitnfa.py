@@ -24,7 +24,7 @@ from regex_cgen.compiler import compile_nfa
 
 def _build(pattern: str, tmp_path: Path, flags: str = "", **kwargs) -> Path:
     """Generate, write and compile a bitnfa C matcher; return the executable."""
-    c_code = generate(pattern, flags=flags, emit_main=True, engine="bitnfa", **kwargs)
+    c_code = generate(pattern, flags=flags, emit_main=True, engine="bitnfa", **kwargs).render()
     c_file = tmp_path / "test.c"
     c_file.write_text(c_code)
     exe = tmp_path / "test"
@@ -52,7 +52,7 @@ def test_variant_uint8() -> None:
     """Pattern with ≤8 NFA positions must use uint8_t."""
     nfa = compile_nfa("ab")
     assert nfa["num_positions"] <= 8
-    code = generate_bitnfa_c_code(nfa)
+    code = generate_bitnfa_c_code(nfa).render()
     assert "uint8_t" in code
     assert re.search(r"regex_trans\[\d+\]\[256\]", code)
 
@@ -61,7 +61,7 @@ def test_variant_uint16() -> None:
     """Pattern with 9-16 NFA positions must use uint16_t."""
     nfa = compile_nfa("helloworld")
     assert 8 < nfa["num_positions"] <= 16
-    code = generate_bitnfa_c_code(nfa)
+    code = generate_bitnfa_c_code(nfa).render()
     assert "uint16_t" in code
     assert re.search(r"regex_trans\[\d+\]\[256\]", code)
 
@@ -70,7 +70,7 @@ def test_variant_uint32() -> None:
     """Pattern with 17-32 NFA positions must use uint32_t (single word)."""
     nfa = compile_nfa("abcdefghijklmnopq")
     assert 16 < nfa["num_positions"] <= 32
-    code = generate_bitnfa_c_code(nfa)
+    code = generate_bitnfa_c_code(nfa).render()
     assert "uint32_t" in code
     # Must not be the array variant
     assert "uint32_t[" not in code
@@ -80,7 +80,7 @@ def test_variant_uint32_array() -> None:
     """Pattern with >32 NFA positions must use uint32_t array."""
     nfa = compile_nfa("a{33}")
     assert nfa["num_positions"] > 32
-    code = generate_bitnfa_c_code(nfa)
+    code = generate_bitnfa_c_code(nfa).render()
     m = re.search(r"regex_trans\[\d+\]\[256\]\[(\d+)\]", code)
     assert m is not None, "Expected 3-dimensional transition table for uint32_array"
     num_words = int(m.group(1))
@@ -95,21 +95,21 @@ def test_variant_uint32_array() -> None:
 def test_no_dynamic_alloc() -> None:
     """Generated code must not contain malloc, calloc, free, or realloc."""
     for pat in ["ab", "helloworld", "abcdefghijklmnopq", "a{33}"]:
-        code = generate(pat, engine="bitnfa")
+        code = generate(pat, engine="bitnfa").render()
         for fn in ("malloc", "calloc", "free", "realloc"):
             assert fn not in code, f"{fn} found in generated code for {pat!r}"
 
 
 def test_metadata_comment() -> None:
     """The generated code must include a metadata comment with the engine name."""
-    code = generate("hello", engine="bitnfa")
+    code = generate("hello", engine="bitnfa").render()
     assert "bitnfa" in code
 
 
 def test_hot_loop_unrolled_uint32_array() -> None:
     """The uint32_array hot loop must contain no loops over words."""
     nfa = compile_nfa("a{33}")
-    code = generate_bitnfa_c_code(nfa)
+    code = generate_bitnfa_c_code(nfa).render()
     # The main for-loop is the only loop; word operations are unrolled
     loop_count = code.count("for (")
     assert loop_count == 1, "Expected exactly one for-loop (the input loop)"
@@ -117,7 +117,7 @@ def test_hot_loop_unrolled_uint32_array() -> None:
 
 def test_prefix() -> None:
     """Custom prefix must be used for table and function names."""
-    code = generate("ab", engine="bitnfa", prefix="my_re")
+    code = generate("ab", engine="bitnfa", prefix="my_re").render()
     assert "my_re_trans" in code
     assert "my_re_match" in code
     assert "regex_" not in code
@@ -311,7 +311,7 @@ def test_bitnfa_matches_dfa(
     dfa_dir.mkdir()
     exe_bitnfa = _build(pattern, bitnfa_dir)
     # Build DFA version
-    c_code = generate(pattern, emit_main=True, engine="dfa")
+    c_code = generate(pattern, emit_main=True, engine="dfa").render()
     c_file = dfa_dir / "test.c"
     c_file.write_text(c_code)
     exe_dfa = dfa_dir / "test"

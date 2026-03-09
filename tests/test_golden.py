@@ -82,7 +82,7 @@ CASES: list[tuple[str, str, dict]] = [
 def test_golden(filename: str, pattern: str, kwargs: dict) -> None:
     """Generated output must match the committed golden file."""
     golden_path = GOLDEN_DIR / filename
-    actual = generate(pattern, **kwargs)
+    actual = generate(pattern, **kwargs).render()
     expected = golden_path.read_text()
     assert actual == expected, (
         f"Golden file '{filename}' does not match the current output of generate().\n"

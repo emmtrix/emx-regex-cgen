@@ -56,7 +56,7 @@ def test_fullmatch(
 
     # 1. Generate C code
     try:
-        c_code = generate(pattern, flags=flags, emit_main=True, engine=engine)
+        c_code = generate(pattern, flags=flags, emit_main=True, engine=engine).render()
     except (ValueError, Exception) as exc:
         pytest.skip(f"Unsupported pattern: {exc}")
 

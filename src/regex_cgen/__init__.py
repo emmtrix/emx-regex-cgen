@@ -6,5 +6,6 @@ approach with a branch-free inner loop suitable for auto-vectorisation.
 """
 
 from .codegen import generate
+from .result import GeneratedCode
 
-__all__ = ["generate"]
+__all__ = ["generate", "GeneratedCode"]

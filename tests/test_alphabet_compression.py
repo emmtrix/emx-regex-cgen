@@ -26,7 +26,7 @@ from regex_cgen.compiler import compile_regex
 
 def _build(pattern: str, tmp_path: Path, flags: str = "", **kwargs) -> Path:
     """Generate, write and compile a C matcher; return the executable path."""
-    c_code = generate(pattern, flags=flags, emit_main=True, **kwargs)
+    c_code = generate(pattern, flags=flags, emit_main=True, **kwargs).render()
     c_file = tmp_path / "test.c"
     c_file.write_text(c_code)
     exe = tmp_path / "test"
@@ -53,7 +53,7 @@ def _run(exe: Path, inp: str) -> bool:
 def test_alphabet_emits_alphabet_map() -> None:
     """When alphabet compression is enabled, the alphabet map must be present."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="yes")
+    code = generate_c_code(dfa, alphabet_compression="yes").render()
     assert re.search(r"regex_alphabet\[256\]", code), (
         "regex_alphabet[256] not found in generated code"
     )
@@ -62,7 +62,7 @@ def test_alphabet_emits_alphabet_map() -> None:
 def test_alphabet_reduces_table_columns() -> None:
     """The emitted transition table must have fewer than 256 columns."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="yes")
+    code = generate_c_code(dfa, alphabet_compression="yes").render()
     m = re.search(r"regex_transitions\[\d+\]\[(\d+)\]", code)
     assert m is not None, "Could not find transitions declaration"
     num_cols = int(m.group(1))
@@ -72,14 +72,14 @@ def test_alphabet_reduces_table_columns() -> None:
 def test_alphabet_no_map_when_disabled() -> None:
     """When alphabet compression is disabled, no alphabet map should be emitted."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="no")
+    code = generate_c_code(dfa, alphabet_compression="no").render()
     assert "regex_alphabet" not in code
 
 
 def test_alphabet_auto_below_threshold() -> None:
     """Auto mode must not compress when the table is below the threshold."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="auto", size_threshold=8192)
+    code = generate_c_code(dfa, alphabet_compression="auto", size_threshold=8192).render()
     assert "regex_alphabet" not in code
 
 
@@ -88,21 +88,21 @@ def test_alphabet_auto_above_threshold() -> None:
     dfa = compile_regex("hello")
     n = dfa["num_states"]
     # Set threshold below the actual table size
-    code = generate_c_code(dfa, alphabet_compression="auto", size_threshold=n * 256 - 1)
+    code = generate_c_code(dfa, alphabet_compression="auto", size_threshold=n * 256 - 1).render()
     assert "regex_alphabet" in code
 
 
 def test_alphabet_hot_loop_uses_map() -> None:
     """When compression is active, the hot loop must reference the alphabet map."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="yes")
+    code = generate_c_code(dfa, alphabet_compression="yes").render()
     assert "regex_alphabet[(unsigned char)input[i]]" in code
 
 
 def test_alphabet_combined_with_row_dedup() -> None:
     """Alphabet compression and row dedup can be enabled together."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, alphabet_compression="yes", row_dedup="yes")
+    code = generate_c_code(dfa, alphabet_compression="yes", row_dedup="yes").render()
     assert "regex_alphabet" in code
     assert "regex_row_map" in code
     # Hot loop must reference both
@@ -177,7 +177,7 @@ def test_alphabet_and_dedup_correctness(
 def test_row_dedup_auto_below_threshold() -> None:
     """Auto mode must not deduplicate when the table is below the threshold."""
     dfa = compile_regex("hello")
-    code = generate_c_code(dfa, row_dedup="auto", size_threshold=8192)
+    code = generate_c_code(dfa, row_dedup="auto", size_threshold=8192).render()
     assert "regex_row_map" not in code
 
 
@@ -185,6 +185,6 @@ def test_row_dedup_auto_above_threshold() -> None:
     """Auto mode must deduplicate when the table exceeds the threshold."""
     dfa = compile_regex("hello")
     n = dfa["num_states"]
-    code = generate_c_code(dfa, row_dedup="auto", size_threshold=n * 256 - 1)
+    code = generate_c_code(dfa, row_dedup="auto", size_threshold=n * 256 - 1).render()
     # The hello pattern has duplicate rows (dead + accept), so row_map should appear
     assert "regex_row_map" in code

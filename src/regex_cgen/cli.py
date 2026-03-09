@@ -107,10 +107,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     if args.output == "-":
-        sys.stdout.write(code)
+        sys.stdout.write(code.render())
     else:
         with open(args.output, "w") as fh:
-            fh.write(code)
+            fh.write(code.render())
 
 
 if __name__ == "__main__":
