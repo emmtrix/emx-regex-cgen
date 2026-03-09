@@ -1,4 +1,4 @@
-# regex-cgen
+# emx-regex-cgen
 
 **Regex to C Code Generator** — compile regular expressions into portable,
 static C code for embedded and performance-critical applications.
