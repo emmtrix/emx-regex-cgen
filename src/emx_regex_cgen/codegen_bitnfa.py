@@ -14,6 +14,15 @@ def _mask_lit(value: int, bits: int) -> str:
     return f"0x{value & 0xffffffff:08x}u"
 
 
+def _min_type(max_val: int) -> tuple[str, int]:
+    """Return the narrowest unsigned C type that can hold *max_val*."""
+    if max_val <= 0xFF:
+        return "uint8_t", 8
+    if max_val <= 0xFFFF:
+        return "uint16_t", 16
+    return "uint32_t", 32
+
+
 def _byte_designator(b: int) -> str:
     """Return a C array designator for byte *b*."""
     if 32 <= b <= 126:
@@ -26,9 +35,18 @@ def _byte_designator(b: int) -> str:
     return f"[{b}]"
 
 
-# ---------------------------------------------------------------------------
-# Single-word variants (uint8 / uint16 / uint32)
-# ---------------------------------------------------------------------------
+def _build_main(func_name: str) -> str:
+    lines = [
+        "int main(int argc, char *argv[]) {",
+        "    if (argc != 2) {",
+        '        fprintf(stderr, "Usage: %s <input>\\n", argv[0]);',
+        "        return 2;",
+        "    }",
+        f"    return {func_name}(argv[1], strlen(argv[1])) ? 0 : 1;",
+        "}",
+    ]
+    return "\n".join(lines)
+
 
 def _emit_single_word(
     nfa: dict,
@@ -46,37 +64,30 @@ def _emit_single_word(
     accept = nfa["accept"]
     trans_masks = nfa["trans_masks"]
 
-    # Positions with at least one non-zero transition
     active_positions = [p for p in range(num_pos) if trans_masks[p]]
 
-    # --- includes -----------------------------------------------------------
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
         includes.extend(["string.h", "stdio.h"])
 
-    # --- globals (transition table) -----------------------------------------
     global_lines: list[str] = []
-    global_lines.append(
-        f"static const {state_t} {prefix}_trans[{num_pos}][256] = {{"
-    )
-    for p in range(num_pos):
+    for p in active_positions:
         masks = trans_masks[p]
+        max_val = max(masks.values(), default=0)
+        pos_type, pos_bits = _min_type(max_val)
         non_zero = sorted((b, v) for b, v in masks.items() if v != 0)
         if not non_zero:
             row_str = "{ 0 }"
         else:
-            entries = []
-            for b, v in non_zero:
-                entries.append(f"{_byte_designator(b)} = {_mask_lit(v, bits)}")
+            entries = [
+                f"{_byte_designator(b)} = {_mask_lit(v, pos_bits)}"
+                for b, v in non_zero
+            ]
             row_str = "{ " + ", ".join(entries) + " }"
-        global_lines.append(f"    /* position {p} */ {row_str},")
-    global_lines.append("};")
+        global_lines.append(f"static const {pos_type} {prefix}_trans_{p}[256] = {row_str};")
     globals_str = "\n".join(global_lines)
 
-    # --- match function -----------------------------------------------------
     match_lines: list[str] = []
-
-    # Metadata comment
     if pattern is not None:
         match_lines.append(f'/* regex:    "{pattern}"')
         match_lines.append(f' * flags:    "{flags}"')
@@ -94,8 +105,7 @@ def _emit_single_word(
     match_lines.append(f"        {state_t} next = 0;")
     for p in active_positions:
         match_lines.append(
-            f"        if (state & {_mask_lit(1 << p, bits)}) "
-            f"next |= {prefix}_trans[{p}][b];"
+            f"        if (state & {_mask_lit(1 << p, bits)}) next |= {prefix}_trans_{p}[b];"
         )
     match_lines.append("        state = next;")
     match_lines.append("    }")
@@ -103,20 +113,13 @@ def _emit_single_word(
     match_lines.append("}")
     match_str = "\n".join(match_lines)
 
-    # --- main function ------------------------------------------------------
-    main_str: str | None = _build_main(func_name) if emit_main else None
-
     return GeneratedCode(
         includes=includes,
         globals=globals_str,
         match_function=match_str,
-        main_function=main_str,
+        main_function=_build_main(func_name) if emit_main else None,
     )
 
-
-# ---------------------------------------------------------------------------
-# Multi-word variant (uint32_t array)
-# ---------------------------------------------------------------------------
 
 def _emit_array_variant(
     nfa: dict,
@@ -138,39 +141,34 @@ def _emit_array_variant(
 
     init_words = to_words(initial)
     accept_words = to_words(accept)
-
     active_positions = [p for p in range(num_pos) if trans_masks[p]]
 
-    # --- includes -----------------------------------------------------------
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
         includes.extend(["string.h", "stdio.h"])
 
-    # --- globals (transition table) -----------------------------------------
     global_lines: list[str] = []
-    global_lines.append(
-        f"static const uint32_t {prefix}_trans[{num_pos}][256][{num_words}] = {{"
-    )
-    for p in range(num_pos):
+    for p in active_positions:
         masks = trans_masks[p]
         non_zero = sorted((b, v) for b, v in masks.items() if v != 0)
         if not non_zero:
-            global_lines.append(f"    /* position {p} */ {{ 0 }},")
-        else:
-            entries = []
-            for b, v in non_zero:
-                words = to_words(v)
-                word_str = ", ".join(f"0x{w:08x}u" for w in words)
-                entries.append(f"{_byte_designator(b)} = {{ {word_str} }}")
-            row_str = "{ " + ", ".join(entries) + " }"
-            global_lines.append(f"    /* position {p} */ {row_str},")
-    global_lines.append("};")
+            global_lines.append(
+                f"static const uint32_t {prefix}_trans_{p}[256][{num_words}] = {{ 0 }};"
+            )
+            continue
+
+        entries = []
+        for b, v in non_zero:
+            words = to_words(v)
+            word_str = ", ".join(f"0x{w:08x}u" for w in words)
+            entries.append(f"{_byte_designator(b)} = {{ {word_str} }}")
+        row_str = "{ " + ", ".join(entries) + " }"
+        global_lines.append(
+            f"static const uint32_t {prefix}_trans_{p}[256][{num_words}] = {row_str};"
+        )
     globals_str = "\n".join(global_lines)
 
-    # --- match function -----------------------------------------------------
     match_lines: list[str] = []
-
-    # Metadata comment
     if pattern is not None:
         match_lines.append(f'/* regex:    "{pattern}"')
         match_lines.append(f' * flags:    "{flags}"')
@@ -188,62 +186,35 @@ def _emit_array_variant(
     match_lines.append("        unsigned char b = (unsigned char)input[i];")
     for w in range(num_words):
         match_lines.append(f"        uint32_t n{w} = 0;")
-    # Fully unrolled position checks
     for p in active_positions:
         word_idx = p // 32
         bit_idx = p % 32
         bit_mask = f"0x{1 << bit_idx:08x}u"
         assigns = " ".join(
-            f"n{w} |= {prefix}_trans[{p}][b][{w}];" for w in range(num_words)
+            f"n{w} |= {prefix}_trans_{p}[b][{w}];" for w in range(num_words)
         )
         match_lines.append(f"        if (s{word_idx} & {bit_mask}) {{ {assigns} }}")
     for w in range(num_words):
         match_lines.append(f"        s{w} = n{w};")
     match_lines.append("    }")
-    # Accept check – fully unrolled, no loops
+
     accept_parts = []
     for w in range(num_words):
         if accept_words[w]:
             accept_parts.append(f"(s{w} & 0x{accept_words[w]:08x}u)")
-    if accept_parts:
-        match_lines.append(f"    return ({' || '.join(accept_parts)}) != 0;")
-    else:
-        match_lines.append("    return false;")
+    match_lines.append(
+        f"    return ({' || '.join(accept_parts)}) != 0;" if accept_parts else "    return false;"
+    )
     match_lines.append("}")
     match_str = "\n".join(match_lines)
-
-    # --- main function ------------------------------------------------------
-    main_str: str | None = _build_main(func_name) if emit_main else None
 
     return GeneratedCode(
         includes=includes,
         globals=globals_str,
         match_function=match_str,
-        main_function=main_str,
+        main_function=_build_main(func_name) if emit_main else None,
     )
 
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-def _build_main(func_name: str) -> str:
-    """Return the C ``main()`` function as a string."""
-    lines = [
-        "int main(int argc, char *argv[]) {",
-        "    if (argc != 2) {",
-        '        fprintf(stderr, "Usage: %s <input>\\n", argv[0]);',
-        "        return 2;",
-        "    }",
-        f"    return {func_name}(argv[1], strlen(argv[1])) ? 0 : 1;",
-        "}",
-    ]
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
 
 def generate_bitnfa_c_code(
     nfa: dict,
@@ -254,11 +225,7 @@ def generate_bitnfa_c_code(
     flags: str = "",
     encoding: str = "utf8",
 ) -> GeneratedCode:
-    """Emit C code for a bit-parallel NFA matcher.
-
-    The variant (``uint8_t``, ``uint16_t``, ``uint32_t``, or
-    ``uint32_t[N]``) is chosen automatically based on *num_positions*.
-    """
+    """Emit C code for a bit-parallel NFA matcher."""
     num_pos = nfa["num_positions"]
 
     if num_pos <= 8:
@@ -268,10 +235,9 @@ def generate_bitnfa_c_code(
     elif num_pos <= 32:
         state_t, bits = "uint32_t", 32
     else:
-        num_words = (num_pos + 31) // 32
         return _emit_array_variant(
             nfa,
-            num_words,
+            (num_pos + 31) // 32,
             prefix=prefix,
             emit_main=emit_main,
             pattern=pattern,

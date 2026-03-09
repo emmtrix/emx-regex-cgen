@@ -9,8 +9,8 @@
 | FR-03 | Optionally emit a `main()` function that reads `argv[1]` and returns exit-code 0 (match), 1 (no match), or 2 (usage error). | ✅ |
 | FR-04 | Support the **re2** feature set (no backreferences, no look-around). | ✅ |
 | FR-05 | Support regex flags: case-insensitive (`i`), dot-all (`s`), multiline (`m`). | ✅ |
-| FR-06 | Usable as a **Python library** (`from regex_cgen import generate`). | ✅ |
-| FR-07 | Usable as a **CLI tool** (`regex-cgen <pattern> [options]`). | ✅ |
+| FR-06 | Usable as a **Python library** (`from emx_regex_cgen import generate`). | ✅ |
+| FR-07 | Usable as a **CLI tool** (`emx-regex-cgen <pattern> [options]`). | ✅ |
 
 ## Non-Functional Requirements
 

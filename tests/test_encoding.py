@@ -10,12 +10,12 @@ character classes operate on raw byte values 0-255.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from regex_cgen import generate
+from emx_regex_cgen import generate
+from tests._support import build_matcher, run_matcher
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -23,23 +23,12 @@ from regex_cgen import generate
 
 def _build(pattern: str, tmp_path: Path, encoding: str = "utf8", flags: str = "") -> Path:
     """Generate, write and compile a C matcher; return the executable path."""
-    c_code = generate(pattern, flags=flags, emit_main=True, encoding=encoding).render()
-    c_file = tmp_path / "test.c"
-    c_file.write_text(c_code)
-    exe = tmp_path / "test"
-    comp = subprocess.run(
-        ["gcc", "-O2", "-o", str(exe), str(c_file)],
-        capture_output=True,
-        timeout=30,
-    )
-    assert comp.returncode == 0, f"gcc failed:\n{comp.stderr.decode()}"
-    return exe
+    return build_matcher(pattern, tmp_path, flags=flags, encoding=encoding)
 
 
 def _run(exe: Path, inp: bytes) -> bool:
-    """Run *exe* with *inp* passed as a single argument; return True on match."""
-    run = subprocess.run([str(exe), inp], capture_output=True, timeout=10)
-    return run.returncode == 0
+    """Run *exe* with *inp* and return True on match."""
+    return run_matcher(exe, inp, exe.parent)
 
 
 # ---------------------------------------------------------------------------

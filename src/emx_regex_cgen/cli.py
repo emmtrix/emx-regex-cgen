@@ -1,4 +1,4 @@
-"""Command-line interface for regex-cgen."""
+"""Command-line interface for emx-regex-cgen."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from .codegen import generate
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="regex-cgen",
+        prog="emx-regex-cgen",
         description="Generate C code that performs a fullmatch for a regular expression.",
     )
     parser.add_argument("pattern", help="Regular expression pattern")

@@ -4,14 +4,14 @@
 
 ## Project Overview
 
-**regex-cgen** is a regex-to-C code generator. It compiles a regular
+**emx-regex-cgen** is a regex-to-C code generator. It compiles a regular
 expression into a minimised DFA and emits portable, static C code that
 performs a fullmatch.
 
 ## Architecture
 
 ```
-src/regex_cgen/
+src/emx_regex_cgen/
 ├── __init__.py      # Public API: generate()
 ├── cli.py           # CLI entry-point (argparse)
 ├── codegen.py       # DFA → C code emission
@@ -64,4 +64,4 @@ src/regex_cgen/
 | Install (dev) | `pip install -e ".[dev]"` |
 | Run tests | `pytest -n auto -q` |
 | Lint | `ruff check src/ tests/` |
-| Generate C | `regex-cgen 'a[bc]+d' --emit-main -o out.c` |
+| Generate C | `emx-regex-cgen 'a[bc]+d' --emit-main -o out.c` |

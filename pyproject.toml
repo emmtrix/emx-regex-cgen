@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "setuptools_scm[toml]>=7.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "regex-cgen"
+name = "emx-regex-cgen"
 version = "0.1.0"
 description = "Regex to C code generator"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = []
 dev = ["pytest", "pytest-xdist", "ruff"]
 
 [project.scripts]
-regex-cgen = "regex_cgen.cli:main"
+emx-regex-cgen = "emx_regex_cgen.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -29,4 +29,4 @@ select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n auto"
+addopts = "-n auto -q"

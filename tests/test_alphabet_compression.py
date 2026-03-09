@@ -10,14 +10,13 @@ table (256) with the number of equivalence classes, and adds a
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from regex_cgen import generate
-from regex_cgen.codegen import generate_c_code
-from regex_cgen.compiler import compile_regex
+from emx_regex_cgen.codegen import generate_c_code
+from emx_regex_cgen.compiler import compile_regex
+from tests._support import build_matcher, run_matcher
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,23 +25,12 @@ from regex_cgen.compiler import compile_regex
 
 def _build(pattern: str, tmp_path: Path, flags: str = "", **kwargs) -> Path:
     """Generate, write and compile a C matcher; return the executable path."""
-    c_code = generate(pattern, flags=flags, emit_main=True, **kwargs).render()
-    c_file = tmp_path / "test.c"
-    c_file.write_text(c_code)
-    exe = tmp_path / "test"
-    comp = subprocess.run(
-        ["gcc", "-O2", "-o", str(exe), str(c_file)],
-        capture_output=True,
-        timeout=30,
-    )
-    assert comp.returncode == 0, f"gcc failed:\n{comp.stderr.decode()}"
-    return exe
+    return build_matcher(pattern, tmp_path, flags=flags, **kwargs)
 
 
 def _run(exe: Path, inp: str) -> bool:
-    """Run *exe* with *inp* as a command-line argument; return True on match."""
-    result = subprocess.run([str(exe), inp], capture_output=True, timeout=10)
-    return result.returncode == 0
+    """Run *exe* with *inp* and return True on match."""
+    return run_matcher(exe, inp, exe.parent)
 
 
 # ---------------------------------------------------------------------------

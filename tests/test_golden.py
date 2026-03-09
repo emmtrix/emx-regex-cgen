@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from regex_cgen import generate
+from emx_regex_cgen import generate
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
@@ -71,10 +71,10 @@ CASES: list[tuple[str, str, dict]] = [
     ("emit_main_bitnfa.c",        r"\d+",
      {"engine": "bitnfa", "emit_main": True}),
     # --- bitnfa variant-specific ---
-    ("bitnfa_uint8.c",        r"ab",              {"engine": "bitnfa"}),
-    ("bitnfa_uint16.c",       r"hello",           {"engine": "bitnfa"}),
-    ("bitnfa_uint32.c",       r"cat|dog|fish",    {"engine": "bitnfa"}),
-    ("bitnfa_uint32_array.c", r"abcdefghijklmnopq", {"engine": "bitnfa"}),
+    ("bitnfa_uint8.c",        r"ab",                              {"engine": "bitnfa"}),
+    ("bitnfa_uint16.c",       r"cat|dog|fish",                    {"engine": "bitnfa"}),
+    ("bitnfa_uint32.c",       r"abcdefghijklmnopq",               {"engine": "bitnfa"}),
+    ("bitnfa_uint32_array.c", r"abcdefghijklmnopqrstuvwxyz012345", {"engine": "bitnfa"}),
 ]
 
 
@@ -83,7 +83,7 @@ def test_golden(filename: str, pattern: str, kwargs: dict) -> None:
     """Generated output must match the committed golden file."""
     golden_path = GOLDEN_DIR / filename
     actual = generate(pattern, **kwargs).render()
-    expected = golden_path.read_text()
+    expected = golden_path.read_text(encoding="utf-8")
     assert actual == expected, (
         f"Golden file '{filename}' does not match the current output of generate().\n"
         "If the change is intentional, regenerate golden files with:\n"

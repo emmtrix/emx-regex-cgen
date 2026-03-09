@@ -1,4 +1,4 @@
-"""regex-cgen: A regex to C code generator.
+"""emx-regex-cgen: A regex to C code generator.
 
 Generates portable, static C code that performs fullmatch on a given
 regular expression pattern.  The generated code uses a table-driven DFA
