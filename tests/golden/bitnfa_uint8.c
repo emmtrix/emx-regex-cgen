@@ -16,8 +16,8 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x01u) next |= ((uint8_t)(b == 'a') << 1u);
-        if (state & 0x02u) next |= ((uint8_t)(b == 'b') << 2u);
+        if (state & 0x01u) next |= ((b == 'a') ? 0x02u : 0u);
+        if (state & 0x02u) next |= ((b == 'b') ? 0x04u : 0u);
         state = next;
     }
     return (state & 0x04u) != 0;

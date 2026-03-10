@@ -5,8 +5,6 @@
 #include <stdint.h>
 
 static const uint8_t regex_trans_1[256] = { ['A'] = 0x03u, ['B'] = 0x03u, ['C'] = 0x03u, ['D'] = 0x03u, ['E'] = 0x03u, ['F'] = 0x03u, ['G'] = 0x03u, ['H'] = 0x03u, ['I'] = 0x03u, ['J'] = 0x03u, ['K'] = 0x03u, ['L'] = 0x03u, ['M'] = 0x03u, ['N'] = 0x03u, ['O'] = 0x03u, ['P'] = 0x03u, ['Q'] = 0x03u, ['R'] = 0x03u, ['S'] = 0x03u, ['T'] = 0x03u, ['U'] = 0x03u, ['V'] = 0x03u, ['W'] = 0x03u, ['X'] = 0x03u, ['Y'] = 0x03u, ['Z'] = 0x03u, ['a'] = 0x03u, ['b'] = 0x03u, ['c'] = 0x03u, ['d'] = 0x03u, ['e'] = 0x03u, ['f'] = 0x03u, ['g'] = 0x03u, ['h'] = 0x03u, ['i'] = 0x03u, ['j'] = 0x03u, ['k'] = 0x03u, ['l'] = 0x03u, ['m'] = 0x03u, ['n'] = 0x03u, ['o'] = 0x03u, ['p'] = 0x03u, ['q'] = 0x03u, ['r'] = 0x03u, ['s'] = 0x03u, ['t'] = 0x03u, ['u'] = 0x03u, ['v'] = 0x03u, ['w'] = 0x03u, ['x'] = 0x03u, ['y'] = 0x03u, ['z'] = 0x03u, [197] = 0x10u, [226] = 0x04u };
-static const uint8_t regex_trans_3[256] = { [170] = 0x03u };
-static const uint8_t regex_trans_4[256] = { [191] = 0x03u };
 
 /* regex:    "[a-z]+"
  * flags:    "i"
@@ -19,9 +17,9 @@ bool regex_match(const char *input, size_t len) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
         if (state & 0x02u) next |= regex_trans_1[b];
-        if (state & 0x04u) next |= ((uint8_t)(b == 132) << 3u);
-        if (state & 0x08u) next |= regex_trans_3[b];
-        if (state & 0x10u) next |= regex_trans_4[b];
+        if (state & 0x04u) next |= ((b == 132) ? 0x08u : 0u);
+        if (state & 0x08u) next |= ((b == 170) ? 0x03u : 0u);
+        if (state & 0x10u) next |= ((b == 191) ? 0x03u : 0u);
         state = next;
     }
     return (state & 0x01u) != 0;

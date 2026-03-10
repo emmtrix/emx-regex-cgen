@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_3[256] = { ['o'] = 0x30u };
+
 
 /* regex:    "colou?r"
  * flags:    ""
@@ -16,12 +16,12 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x01u) next |= ((uint8_t)(b == 'c') << 1u);
-        if (state & 0x02u) next |= ((uint8_t)(b == 'o') << 2u);
-        if (state & 0x04u) next |= ((uint8_t)(b == 'l') << 3u);
-        if (state & 0x08u) next |= regex_trans_3[b];
-        if (state & 0x10u) next |= ((uint8_t)(b == 'u') << 5u);
-        if (state & 0x20u) next |= ((uint8_t)(b == 'r') << 6u);
+        if (state & 0x01u) next |= ((b == 'c') ? 0x02u : 0u);
+        if (state & 0x02u) next |= ((b == 'o') ? 0x04u : 0u);
+        if (state & 0x04u) next |= ((b == 'l') ? 0x08u : 0u);
+        if (state & 0x08u) next |= ((b == 'o') ? 0x30u : 0u);
+        if (state & 0x10u) next |= ((b == 'u') ? 0x20u : 0u);
+        if (state & 0x20u) next |= ((b == 'r') ? 0x40u : 0u);
         state = next;
     }
     return (state & 0x40u) != 0;

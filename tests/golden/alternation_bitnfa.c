@@ -16,16 +16,16 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint16_t next = 0;
-        if (state & 0x0002u) next |= ((uint8_t)(b == 'c') << 2u);
-        if (state & 0x0004u) next |= ((uint8_t)(b == 'a') << 3u);
-        if (state & 0x0008u) next |= ((uint8_t)(b == 't') << 0u);
-        if (state & 0x0010u) next |= ((uint8_t)(b == 'd') << 5u);
-        if (state & 0x0020u) next |= ((uint8_t)(b == 'o') << 6u);
-        if (state & 0x0040u) next |= ((uint8_t)(b == 'g') << 0u);
-        if (state & 0x0080u) next |= ((uint16_t)(b == 'f') << 8u);
-        if (state & 0x0100u) next |= ((uint16_t)(b == 'i') << 9u);
-        if (state & 0x0200u) next |= ((uint16_t)(b == 's') << 10u);
-        if (state & 0x0400u) next |= ((uint8_t)(b == 'h') << 0u);
+        if (state & 0x0002u) next |= ((b == 'c') ? 0x0004u : 0u);
+        if (state & 0x0004u) next |= ((b == 'a') ? 0x0008u : 0u);
+        if (state & 0x0008u) next |= ((b == 't') ? 0x0001u : 0u);
+        if (state & 0x0010u) next |= ((b == 'd') ? 0x0020u : 0u);
+        if (state & 0x0020u) next |= ((b == 'o') ? 0x0040u : 0u);
+        if (state & 0x0040u) next |= ((b == 'g') ? 0x0001u : 0u);
+        if (state & 0x0080u) next |= ((b == 'f') ? 0x0100u : 0u);
+        if (state & 0x0100u) next |= ((b == 'i') ? 0x0200u : 0u);
+        if (state & 0x0200u) next |= ((b == 's') ? 0x0400u : 0u);
+        if (state & 0x0400u) next |= ((b == 'h') ? 0x0001u : 0u);
         state = next;
     }
     return (state & 0x0001u) != 0;

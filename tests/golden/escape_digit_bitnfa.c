@@ -27,10 +27,10 @@ bool regex_match(const char *input, size_t len) {
         if (state & 0x0002u) next |= regex_trans_1[b];
         if (state & 0x0004u) next |= regex_trans_2[b];
         if (state & 0x0008u) next |= regex_trans_3[b];
-        if (state & 0x0010u) next |= ((uint8_t)(b == '-') << 5u);
+        if (state & 0x0010u) next |= ((b == '-') ? 0x0020u : 0u);
         if (state & 0x0020u) next |= regex_trans_5[b];
         if (state & 0x0040u) next |= regex_trans_6[b];
-        if (state & 0x0080u) next |= ((uint16_t)(b == '-') << 8u);
+        if (state & 0x0080u) next |= ((b == '-') ? 0x0100u : 0u);
         if (state & 0x0100u) next |= regex_trans_8[b];
         if (state & 0x0200u) next |= regex_trans_9[b];
         state = next;

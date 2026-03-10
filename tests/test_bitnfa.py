@@ -118,17 +118,17 @@ def test_prefix() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Single-bit inline optimisation
+# Single-entry inline optimisation
 # ---------------------------------------------------------------------------
 
 
-def test_inline_opt_no_table_for_single_bit_positions() -> None:
-    """Positions with one non-zero power-of-two entry must not emit a table."""
-    # "ab" has two positions each mapping one byte to a single-bit mask.
+def test_inline_opt_no_table_for_single_entry_positions() -> None:
+    """Positions with exactly one non-zero entry must not emit a table."""
+    # "ab" has two positions each mapping one byte to exactly one mask.
     nfa = compile_nfa("ab")
     code = generate_bitnfa_c_code(nfa).render()
     assert not re.search(r"regex_trans_\d+\[256\]", code), (
-        "Expected no 256-byte tables for 'ab' (all positions are single-bit)"
+        "Expected no 256-byte tables for 'ab' (all positions are single-entry)"
     )
     assert "(b == 'a')" in code
     assert "(b == 'b')" in code
@@ -146,9 +146,9 @@ def test_inline_opt_tables_preserved_for_multi_entry_positions() -> None:
 
 
 def test_inline_opt_mixed_pattern() -> None:
-    r"""Mixed patterns emit both tables (multi-entry) and inline exprs (single-bit)."""
+    r"""Mixed patterns emit both tables (multi-entry) and inline ternaries (single-entry)."""
     # "\d{4}-\d{2}-\d{2}": digit positions have 10 entries (tables), while the
-    # two '-' positions each have a single byte mapping to a power-of-two mask.
+    # two '-' positions each have a single entry and use the ternary inline form.
     nfa = compile_nfa(r"\d{4}-\d{2}-\d{2}")
     code = generate_bitnfa_c_code(nfa).render()
     assert re.search(r"regex_trans_\d+\[256\]", code), "Digit positions must keep tables"
@@ -156,9 +156,9 @@ def test_inline_opt_mixed_pattern() -> None:
 
 
 def test_inline_opt_array_variant() -> None:
-    """Single-bit positions in the uint32_array variant also use inline expressions."""
+    """Single-entry positions in the uint32_array variant also use inline ternaries."""
     # "abcdefghijklmnopqrstuvwxyz012345" has 36 unique chars → >32 positions,
-    # each position mapping exactly one byte to a single-bit mask.
+    # each position mapping exactly one byte to exactly one mask entry.
     nfa = compile_nfa("abcdefghijklmnopqrstuvwxyz012345")
     assert nfa["num_positions"] > 32
     code = generate_bitnfa_c_code(nfa).render()
@@ -168,12 +168,25 @@ def test_inline_opt_array_variant() -> None:
     assert "(b == 'a')" in code
 
 
+def test_inline_opt_non_power_of_two_mask() -> None:
+    """Single-entry positions with non-power-of-two masks must use inline ternary."""
+    # "a*a" pos 0 maps 'a' -> 0x03 (two bits set); the ternary handles this correctly
+    # while the old shift approach could not.
+    nfa = compile_nfa("a*a")
+    code = generate_bitnfa_c_code(nfa).render()
+    assert not re.search(r"regex_trans_\d+\[256\]", code), (
+        "Expected no 256-byte tables for 'a*a' (all positions are single-entry)"
+    )
+    assert "(b == 'a') ? 0x03u : 0u" in code, "Expected ternary with multi-bit mask for 'a*a'"
+
+
 def test_inline_opt_functional_correctness(tmp_path: Path) -> None:
     """Patterns using the inline optimisation must still match correctly."""
-    # "hello" and "ab" have all-inline transitions; verify compile+run.
     cases = [
         ("hello", ["hello"], ["hell", "helloo", ""]),
         ("ab", ["ab"], ["a", "b", "abc", ""]),
+        # non-power-of-two single-entry mask
+        ("a*a", ["a", "aa", "aaa"], ["", "b", "ab"]),
     ]
     for i, (pattern, matches, rejects) in enumerate(cases):
         sub = tmp_path / str(i)

@@ -16,11 +16,11 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x01u) next |= ((uint8_t)(b == 'h') << 1u);
-        if (state & 0x02u) next |= ((uint8_t)(b == 'e') << 2u);
-        if (state & 0x04u) next |= ((uint8_t)(b == 'l') << 3u);
-        if (state & 0x08u) next |= ((uint8_t)(b == 'l') << 4u);
-        if (state & 0x10u) next |= ((uint8_t)(b == 'o') << 5u);
+        if (state & 0x01u) next |= ((b == 'h') ? 0x02u : 0u);
+        if (state & 0x02u) next |= ((b == 'e') ? 0x04u : 0u);
+        if (state & 0x04u) next |= ((b == 'l') ? 0x08u : 0u);
+        if (state & 0x08u) next |= ((b == 'l') ? 0x10u : 0u);
+        if (state & 0x10u) next |= ((b == 'o') ? 0x20u : 0u);
         state = next;
     }
     return (state & 0x20u) != 0;

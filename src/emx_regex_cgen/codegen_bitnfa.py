@@ -47,11 +47,6 @@ def _byte_cmp_lit(b: int) -> str:
     return str(b)
 
 
-def _is_single_bit(v: int) -> bool:
-    """Return True iff *v* is a positive power of two (exactly one bit set)."""
-    return v > 0 and (v & (v - 1)) == 0
-
-
 def _build_main(func_name: str) -> str:
     lines = [
         "int main(int argc, char *argv[]) {",
@@ -85,19 +80,16 @@ def _emit_single_word(
 
     # Pre-classify each active position: can it be replaced by an inline
     # comparison expression?  A position qualifies when its transition map
-    # has exactly one non-zero entry whose value is a power of two
-    # (single destination bit).  In that case we emit
-    #   next |= ((pos_type)(b == c) << k);
+    # has exactly one non-zero entry.  In that case we emit
+    #   next |= ((b == c) ? mask : 0u);
     # instead of a 256-byte lookup table.
-    inline: dict[int, tuple[int, str, int]] = {}  # p -> (byte, pos_type, shift)
+    inline: dict[int, tuple[int, int]] = {}  # p -> (byte, mask_value)
     for p in active_positions:
         masks = trans_masks[p]
         non_zero = [(b, v) for b, v in masks.items() if v != 0]
         if len(non_zero) == 1:
             b_val, v = non_zero[0]
-            if _is_single_bit(v):
-                pos_type, _ = _min_type(v)
-                inline[p] = (b_val, pos_type, v.bit_length() - 1)
+            inline[p] = (b_val, v)
 
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
@@ -141,8 +133,8 @@ def _emit_single_word(
     for p in active_positions:
         state_check = f"state & {_mask_lit(1 << p, bits)}"
         if p in inline:
-            b_val, pos_type, shift = inline[p]
-            rhs = f"(({pos_type})(b == {_byte_cmp_lit(b_val)}) << {shift}u)"
+            b_val, v = inline[p]
+            rhs = f"((b == {_byte_cmp_lit(b_val)}) ? {_mask_lit(v, bits)} : 0u)"
         else:
             rhs = f"{prefix}_trans_{p}[b]"
         match_lines.append(f"        if ({state_check}) next |= {rhs};")
@@ -182,18 +174,15 @@ def _emit_array_variant(
     accept_words = to_words(accept)
     active_positions = [p for p in range(num_pos) if trans_masks[p]]
 
-    # Pre-classify: positions with a single non-zero entry whose value is a
-    # power of two (one destination bit) can be emitted as an inline
-    # comparison instead of a 2-D lookup table.
-    inline: dict[int, tuple[int, int, int]] = {}  # p -> (byte, word_idx, bit_in_word)
+    # Pre-classify: positions with a single non-zero entry can be emitted as
+    # an inline ternary comparison instead of a 2-D lookup table.
+    inline: dict[int, tuple[int, int]] = {}  # p -> (byte, mask_value)
     for p in active_positions:
         masks = trans_masks[p]
         non_zero = [(b, v) for b, v in masks.items() if v != 0]
         if len(non_zero) == 1:
             b_val, v = non_zero[0]
-            if _is_single_bit(v):
-                bit_pos = v.bit_length() - 1
-                inline[p] = (b_val, bit_pos // 32, bit_pos % 32)
+            inline[p] = (b_val, v)
 
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
@@ -245,9 +234,12 @@ def _emit_array_variant(
         bit_idx = p % 32
         bit_mask = f"0x{1 << bit_idx:08x}u"
         if p in inline:
-            b_val, dest_word, dest_bit = inline[p]
-            assigns = (
-                f"n{dest_word} |= ((uint32_t)(b == {_byte_cmp_lit(b_val)}) << {dest_bit}u);"
+            b_val, v = inline[p]
+            words = to_words(v)
+            assigns = " ".join(
+                f"n{w} |= ((b == {_byte_cmp_lit(b_val)}) ? 0x{words[w]:08x}u : 0u);"
+                for w in range(num_words)
+                if words[w] != 0
             )
         else:
             assigns = " ".join(
