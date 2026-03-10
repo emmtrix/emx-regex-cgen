@@ -1,7 +1,7 @@
 r"""Tests for \b and \B word-boundary assertions.
 
-Verifies that the DFA engine correctly handles word-boundary (\b) and
-non-word-boundary (\B) zero-width assertions via generate → compile →
+Verifies that the DFA and bitnfa engines correctly handle word-boundary (\b)
+and non-word-boundary (\B) zero-width assertions via generate → compile →
 execute round-trips.
 """
 
@@ -68,20 +68,17 @@ from tests._support import build_matcher, run_matcher
     ],
     ids=lambda x: repr(x) if isinstance(x, str) else str(x),
 )
+@pytest.mark.parametrize("engine", ["dfa", "bitnfa"])
 def test_word_boundary(
-    pattern: str, flags: str, input_str: str, expected: bool, tmp_path: Path
+    pattern: str, flags: str, input_str: str, expected: bool,
+    engine: str, tmp_path: Path,
 ) -> None:
     r"""Generate → compile → execute for \b / \B patterns."""
-    exe = build_matcher(pattern, tmp_path, flags=flags, engine="dfa")
+    exe = build_matcher(pattern, tmp_path, flags=flags, engine=engine)
     actual = run_matcher(exe, input_str, tmp_path)
     assert actual == expected, (
-        f"Pattern {pattern!r} (flags={flags!r}) with input {input_str!r}: "
+        f"Pattern {pattern!r} (flags={flags!r}, engine={engine}) "
+        f"with input {input_str!r}: "
         f"expected {'match' if expected else 'no match'}, "
         f"got {'match' if actual else 'no match'}"
     )
-
-
-def test_bitnfa_rejects_boundary(tmp_path: Path) -> None:
-    r"""bitnfa engine must reject \b / \B patterns with a clear error."""
-    with pytest.raises(ValueError, match=r"\\b.*bitnfa"):
-        build_matcher(r"\bword\b", tmp_path, engine="bitnfa")

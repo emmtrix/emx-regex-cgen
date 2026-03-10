@@ -35,6 +35,9 @@ CASES: list[tuple[str, str, dict]] = [
     # --- word boundary ---
     ("word_boundary.c",        r"\bword\b",               {}),
     ("non_word_boundary.c",    r"a\Bb",                   {}),
+    # --- word boundary (bitnfa) ---
+    ("word_boundary_bitnfa.c",     r"\bword\b",           {"engine": "bitnfa"}),
+    ("non_word_boundary_bitnfa.c", r"a\Bb",               {"engine": "bitnfa"}),
     # --- CLI options / flags (DFA) ---
     ("flag_ignorecase.c",      r"[a-z]+",                 {"flags": "i"}),
     ("flag_dotall.c",          r".+",                     {"flags": "s"}),
