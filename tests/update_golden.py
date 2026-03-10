@@ -39,6 +39,9 @@ CASES: list[tuple[str, str, dict]] = [
     # --- word boundary ---
     ("word_boundary.c",        r"\bword\b",               {}),
     ("non_word_boundary.c",    r"a\Bb",                   {}),
+    # --- unicode property ---
+    ("unicode_property.c",     r"\p{Nd}+",                {}),
+    ("unicode_property_bitnfa.c", r"\p{Nd}+",             {"engine": "bitnfa"}),
     # --- word boundary (bitnfa) ---
     ("word_boundary_bitnfa.c",     r"\bword\b",           {"engine": "bitnfa"}),
     ("non_word_boundary_bitnfa.c", r"a\Bb",               {"engine": "bitnfa"}),

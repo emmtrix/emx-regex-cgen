@@ -14,6 +14,8 @@ from __future__ import annotations
 import re as _re
 import sys as _sys
 
+from .unicode_data import resolve_property as _resolve_property
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ AT = _Const("AT")
 NEGATE = _Const("NEGATE")
 RANGE = _Const("RANGE")
 CATEGORY = _Const("CATEGORY")
+UNICODE_PROPERTY = _Const("UNICODE_PROPERTY")
 
 # -- AT sub-types -----------------------------------------------------------
 
@@ -495,10 +498,12 @@ class _Parser:
         if "0" <= ch <= "7":
             return (LITERAL, self._octal_escape(ch, esc_pos))
 
-        if ch in "pPCQEz":
-            raise self._error(f"bad escape \\{ch}", esc_pos)
+        if ch in "pP":
+            name = self._unicode_property(ch, esc_pos)
+            return (UNICODE_PROPERTY, (name, ch == "P"))
 
-        # Literal escape for ``-``, ``]``, ``\``, ``^``, etc.
+        if ch in "CQEz":
+            raise self._error(f"bad escape \\{ch}", esc_pos)
         return (LITERAL, ord(ch))
 
     # -- escape outside character class --------------------------------------
@@ -572,8 +577,18 @@ class _Parser:
         if ch in "89":
             raise self._error(f"bad escape \\{ch}", esc_pos)
 
+        # Unicode property escapes.
+        if ch in "pP":
+            name = self._unicode_property(ch, esc_pos)
+            negate = ch == "P"
+            items: list = []
+            if negate:
+                items.append((NEGATE, None))
+            items.append((UNICODE_PROPERTY, (name, False)))
+            return (IN, items)
+
         # Unsupported PCRE2 / Perl escapes.
-        if ch in "pPCQEz":
+        if ch in "CQEz":
             raise self._error(f"bad escape \\{ch}", esc_pos)
 
         # Literal escape — ``\.``, ``\\``, ``\*``, etc.
@@ -612,6 +627,38 @@ class _Parser:
                 esc_pos,
             )
         return val
+
+    def _unicode_property(self, esc_ch: str, esc_pos: int) -> str:
+        r"""Parse Unicode property name after ``\p`` or ``\P``.
+
+        Accepts both ``\p{Name}`` (braced) and ``\pX`` (single-letter) forms.
+        Returns the resolved property name.
+        """
+        if self._at_end:
+            raise self._error(f"bad escape \\{esc_ch}", esc_pos)
+        if self._peek() == "{":
+            self._advance()  # consume '{'
+            start = self.pos
+            while not self._at_end and self._peek() != "}":
+                self._advance()
+            if self._at_end:
+                raise self._error(
+                    f"incomplete Unicode property \\{esc_ch}{{...", esc_pos,
+                )
+            name = self.source[start : self.pos]
+            self._advance()  # consume '}'
+        else:
+            # Single-letter form: \pL, \pN, etc.
+            name = self._advance()
+        if not name:
+            raise self._error("empty Unicode property name", esc_pos)
+        try:
+            _resolve_property(name)
+        except _re.error:
+            raise self._error(
+                f"unknown Unicode property name: {name!r}", esc_pos,
+            ) from None
+        return name
 
 
 # ---------------------------------------------------------------------------

@@ -209,6 +209,7 @@ options:
 | Unicode / UTF-8 | `\x{00e9}+` | [unicode.c](tests/golden/unicode.c) | [unicode\_bitnfa.c](tests/golden/unicode_bitnfa.c) |
 | Anchors `^` / `$` | `^start.*end$` | [anchors.c](tests/golden/anchors.c) | [anchors\_bitnfa.c](tests/golden/anchors_bitnfa.c) |
 | Word boundary `\b` / `\B` | `\bword\b` | [word\_boundary.c](tests/golden/word_boundary.c) | [word\_boundary\_bitnfa.c](tests/golden/word_boundary_bitnfa.c) |
+| Unicode property `\p{…}` / `\P{…}` | `\p{Nd}+` | [unicode\_property.c](tests/golden/unicode_property.c) | [unicode\_property\_bitnfa.c](tests/golden/unicode_property_bitnfa.c) |
 
 ### CLI Options
 

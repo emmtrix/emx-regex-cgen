@@ -36,16 +36,21 @@ from .parser import (
     NOT_LITERAL,
     RANGE,
     SUBPATTERN,
+    UNICODE_PROPERTY,
 )
 from .parser import (
     parse as _parse_regex,
 )
+from .unicode_data import resolve_property as _resolve_property
 
 # Limit to prevent runaway DFA construction
 _MAX_DFA_STATES = 10_000
 
 # Limit for bit-parallel NFA (generated table is positions × 256 entries)
 _MAX_BITNFA_POSITIONS = 256
+
+# Limit for Thompson NFA states to prevent runaway construction
+_MAX_NFA_STATES = 50_000
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,6 +106,23 @@ def _category_bytes(cat: int) -> frozenset[int]:
     return frozenset()
 
 
+def _unicode_property_bytes(
+    name: str, negate: bool, byte_limit: int,
+) -> frozenset[int]:
+    """Return byte values matching Unicode property *name* within [0, *byte_limit*)."""
+    ranges = _resolve_property(name)
+    chars: set[int] = set()
+    for lo, hi in ranges:
+        if lo >= byte_limit:
+            break
+        for b in range(lo, min(hi + 1, byte_limit)):
+            chars.add(b)
+    result = frozenset(chars)
+    if negate:
+        return frozenset(range(byte_limit)) - result
+    return result
+
+
 # ---------------------------------------------------------------------------
 # NFA builder (Thompson construction)
 # ---------------------------------------------------------------------------
@@ -128,6 +150,10 @@ class NFABuilder:
 
     def _new(self) -> int:
         s = self._next
+        if s >= _MAX_NFA_STATES:
+            raise ValueError(
+                f"NFA state limit exceeded ({_MAX_NFA_STATES})"
+            )
         self._next += 1
         return s
 
@@ -341,6 +367,9 @@ class NFABuilder:
                                         chars.add(alt)
             elif op == CATEGORY:
                 chars |= set(_category_bytes(value))
+            elif op == UNICODE_PROPERTY:
+                prop_name, prop_negate = value
+                chars |= set(_unicode_property_bytes(prop_name, prop_negate, byte_limit))
         chars &= set(range(byte_limit))
         if negate:
             chars = set(range(byte_limit)) - chars
@@ -370,6 +399,14 @@ class NFABuilder:
                                 cps.add(alt)
                     elif c >= 128:
                         cps.add(c)
+            elif op == UNICODE_PROPERTY:
+                prop_name, prop_negate = value
+                if not prop_negate:
+                    # Items listed in the property are excluded when the
+                    # whole class is negated.
+                    for lo, hi in _resolve_property(prop_name):
+                        for c in range(max(lo, 128), min(hi + 1, 0x110000)):
+                            cps.add(c)
         return cps
 
     def _non_ascii_codes(self, items: list) -> set[int]:
@@ -399,6 +436,12 @@ class NFABuilder:
                         for alt in self._case_variants(c):
                             if alt > 127:
                                 codes.add(alt)
+            elif op == UNICODE_PROPERTY:
+                prop_name, prop_negate = value
+                if not prop_negate:
+                    for rlo, rhi in _resolve_property(prop_name):
+                        for c in range(max(rlo, 128), min(rhi + 1, 0x800)):
+                            codes.add(c)
         # Negation handled separately via _add_utf8_paths
         if negate:
             return set()
@@ -612,6 +655,22 @@ class NFABuilder:
                             self._add_3byte_range(s0, s1, lo, hi)
                         if hi >= 0x10000:
                             self._add_4byte_range(s0, s1, lo, hi)
+                    elif op == UNICODE_PROPERTY:
+                        prop_name, prop_negate = value
+                        if prop_negate:
+                            # Per-item negation: accept all non-ASCII EXCEPT the
+                            # property's code points.
+                            exc: set[int] = set()
+                            for rlo, rhi in _resolve_property(prop_name):
+                                for c in range(max(rlo, 128), min(rhi + 1, 0x110000)):
+                                    exc.add(c)
+                            self._add_utf8_paths(s0, s1, excluded_cps=exc)
+                        else:
+                            for rlo, rhi in _resolve_property(prop_name):
+                                if rhi >= 0x800:
+                                    self._add_3byte_range(s0, s1, rlo, rhi)
+                                if rhi >= 0x10000:
+                                    self._add_4byte_range(s0, s1, rlo, rhi)
                 # NOT-categories (e.g. \S, \D, \W) implicitly include all non-ASCII
                 if self._needs_utf8_accept(items):
                     self._add_utf8_paths(s0, s1)
