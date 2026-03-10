@@ -94,7 +94,7 @@ Library arguments map directly to the generator settings:
 
 | Argument | Type | Default | Meaning |
 |----------|------|---------|---------|
-| `pattern` | `str` | â€” | Regular expression to compile. |
+| `pattern` | `str` | - | Regular expression to compile. |
 | `flags` | `str` | `""` | Regex flags: `i` (ignore case), `s` (dot-all), `m` (multiline), `x` (verbose syntax accepted for compatibility). |
 | `emit_main` | `bool` | `False` | Include a standalone `main()` function in the generated C code. |
 | `prefix` | `str` | `"regex"` | Prefix for generated C identifiers such as `regex_match`. |
