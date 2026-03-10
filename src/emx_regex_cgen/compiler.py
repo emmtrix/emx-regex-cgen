@@ -16,8 +16,10 @@ try:
         AT,
         AT_BEGINNING,
         AT_BEGINNING_STRING,
+        AT_BOUNDARY,
         AT_END,
         AT_END_STRING,
+        AT_NON_BOUNDARY,
         BRANCH,
         CATEGORY,
         CATEGORY_DIGIT,
@@ -41,8 +43,10 @@ except ImportError:
         AT,
         AT_BEGINNING,
         AT_BEGINNING_STRING,
+        AT_BOUNDARY,
         AT_END,
         AT_END_STRING,
+        AT_NON_BOUNDARY,
         BRANCH,
         CATEGORY,
         CATEGORY_DIGIT,
@@ -140,6 +144,8 @@ class NFABuilder:
         self._next: int = 0
         self.transitions: dict[tuple[int, int], set[int]] = {}
         self.epsilon: dict[int, set[int]] = {}
+        self.boundary_epsilon: dict[int, list[tuple[int, str]]] = {}
+        self.has_boundary: bool = False
         self.case_insensitive = case_insensitive
         self.dot_all = dot_all
         self.bytes_mode = bytes_mode
@@ -156,6 +162,10 @@ class NFABuilder:
 
     def _eps(self, src: int, dst: int) -> None:
         self.epsilon.setdefault(src, set()).add(dst)
+
+    def _boundary_eps(self, src: int, dst: int, btype: str) -> None:
+        self.boundary_epsilon.setdefault(src, []).append((dst, btype))
+        self.has_boundary = True
 
     # -- character helpers ---------------------------------------------------
 
@@ -540,6 +550,14 @@ class NFABuilder:
                 s0, s1 = self._new(), self._new()
                 self._eps(s0, s1)
                 return s0, s1
+            if val == AT_BOUNDARY:
+                s0, s1 = self._new(), self._new()
+                self._boundary_eps(s0, s1, "b")
+                return s0, s1
+            if val == AT_NON_BOUNDARY:
+                s0, s1 = self._new(), self._new()
+                self._boundary_eps(s0, s1, "B")
+                return s0, s1
             raise ValueError(f"Unsupported anchor: {val}")
         raise ValueError(f"Unsupported regex op: {op}")
 
@@ -769,6 +787,129 @@ def _nfa_to_dfa(
                 if accept in nxt_closure:
                     dfa_accept.add(dfa_map[nxt_closure])
             dfa_trans[(cur_id, b)] = dfa_map[nxt_closure]
+
+    return {
+        "num_states": counter,
+        "initial": 0,
+        "accept": dfa_accept,
+        "transitions": dfa_trans,
+    }
+
+
+def _cond_eps_closure(
+    states: frozenset[int] | set[int],
+    eps: dict[int, set[int]],
+    boundary_eps: dict[int, list[tuple[int, str]]],
+    prev_word: bool,
+    curr_word: bool,
+) -> frozenset[int]:
+    """Epsilon closure with conditional word-boundary epsilons.
+
+    Regular epsilons are always followed.  Boundary epsilons are followed
+    only when the word-boundary condition matches:
+
+    * ``\\b`` (type ``"b"``): ``prev_word != curr_word``
+    * ``\\B`` (type ``"B"``): ``prev_word == curr_word``
+    """
+    closure = set(states)
+    stack = list(states)
+    is_boundary = prev_word != curr_word
+    while stack:
+        s = stack.pop()
+        for t in eps.get(s, ()):
+            if t not in closure:
+                closure.add(t)
+                stack.append(t)
+        for t, btype in boundary_eps.get(s, ()):
+            if (btype == "b") == is_boundary:
+                if t not in closure:
+                    closure.add(t)
+                    stack.append(t)
+    return frozenset(closure)
+
+
+def _nfa_to_dfa_boundary(
+    builder: NFABuilder, start: int, accept: int
+) -> dict:
+    r"""NFA→DFA subset construction with ``\b`` / ``\B`` support.
+
+    Each DFA state encodes *(frozenset of NFA states, prev_was_word)*
+    so that word-boundary epsilons can be evaluated during transitions.
+    """
+    state_bytes: dict[int, set[int]] = {}
+    for (src, b) in builder.transitions:
+        state_bytes.setdefault(src, set()).add(b)
+
+    initial = _epsilon_closure({start}, builder.epsilon)
+    # String start ⇒ prev_was_word = False
+    initial_key: tuple[frozenset[int], bool] = (initial, False)
+
+    dfa_map: dict[tuple[frozenset[int], bool], int] = {initial_key: 0}
+    dfa_trans: dict[tuple[int, int], int] = {}
+    dfa_accept: set[int] = set()
+
+    # Empty-string acceptance: at string end, "next" is non-word
+    end_closure = _cond_eps_closure(
+        initial, builder.epsilon, builder.boundary_epsilon, False, False
+    )
+    if accept in end_closure:
+        dfa_accept.add(0)
+
+    counter = 1
+    queue: deque[tuple[frozenset[int], bool]] = deque([initial_key])
+
+    while queue:
+        cur_key = queue.popleft()
+        cur_nfa, prev_word = cur_key
+        cur_id = dfa_map[cur_key]
+
+        # Pre-compute conditional closures for word / non-word next bytes
+        expanded_w = _cond_eps_closure(
+            cur_nfa, builder.epsilon, builder.boundary_epsilon,
+            prev_word, True,
+        )
+        expanded_nw = _cond_eps_closure(
+            cur_nfa, builder.epsilon, builder.boundary_epsilon,
+            prev_word, False,
+        )
+
+        # Collect active bytes from both expansions
+        active: set[int] = set()
+        for s in expanded_w:
+            if s in state_bytes:
+                active |= state_bytes[s]
+        for s in expanded_nw:
+            if s in state_bytes:
+                active |= state_bytes[s]
+
+        for b in active:
+            cw = b in _WORD
+            expanded = expanded_w if cw else expanded_nw
+
+            nxt_nfa: set[int] = set()
+            for s in expanded:
+                nxt_nfa |= builder.transitions.get((s, b), set())
+            if not nxt_nfa:
+                continue
+            nxt_closure = _epsilon_closure(nxt_nfa, builder.epsilon)
+
+            nxt_key = (nxt_closure, cw)
+            if nxt_key not in dfa_map:
+                if counter >= _MAX_DFA_STATES:
+                    raise ValueError(
+                        f"DFA state limit exceeded ({_MAX_DFA_STATES})"
+                    )
+                dfa_map[nxt_key] = counter
+                counter += 1
+                queue.append(nxt_key)
+                # End-of-string acceptance: "next" is non-word
+                end_cl = _cond_eps_closure(
+                    nxt_closure, builder.epsilon, builder.boundary_epsilon,
+                    cw, False,
+                )
+                if accept in end_cl:
+                    dfa_accept.add(dfa_map[nxt_key])
+            dfa_trans[(cur_id, b)] = dfa_map[nxt_key]
 
     return {
         "num_states": counter,
@@ -1067,7 +1208,10 @@ def compile_regex(pattern: str, flags: str = "", encoding: str = "utf8") -> dict
     """
     builder, start, accept = _build_nfa(pattern, flags, encoding)
 
-    dfa = _nfa_to_dfa(builder, start, accept)
+    if builder.has_boundary:
+        dfa = _nfa_to_dfa_boundary(builder, start, accept)
+    else:
+        dfa = _nfa_to_dfa(builder, start, accept)
     dfa = _add_dead_state(dfa)
     dfa = _minimize_dfa(dfa)
     dfa = _renumber(dfa)
@@ -1240,6 +1384,12 @@ def compile_nfa(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
       ``dict[int, int]`` mapping byte values to destination bitsets.
     """
     builder, start, accept = _build_nfa(pattern, flags, encoding)
+
+    if builder.has_boundary:
+        raise ValueError(
+            r"\b / \B word-boundary assertions are not supported "
+            "by the bitnfa engine"
+        )
 
     nfa = _reduce_to_position_nfa(builder, start, accept)
 
