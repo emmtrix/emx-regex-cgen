@@ -4,20 +4,31 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_1[256] = { ['a'] = 0x03u, ['b'] = 0x03u, ['c'] = 0x03u, ['d'] = 0x03u, ['e'] = 0x03u, ['f'] = 0x03u, ['g'] = 0x03u, ['h'] = 0x03u, ['i'] = 0x03u, ['j'] = 0x03u, ['k'] = 0x03u, ['l'] = 0x03u, ['m'] = 0x03u, ['n'] = 0x03u, ['o'] = 0x03u, ['p'] = 0x03u, ['q'] = 0x03u, ['r'] = 0x03u, ['s'] = 0x03u, ['t'] = 0x03u, ['u'] = 0x03u, ['v'] = 0x03u, ['w'] = 0x03u, ['x'] = 0x03u, ['y'] = 0x03u, ['z'] = 0x03u };
+static const uint8_t regex_trans_1[256] = { ['a'] = 0x06u, ['b'] = 0x06u, ['c'] = 0x06u, ['d'] = 0x06u, ['e'] = 0x06u, ['f'] = 0x06u, ['g'] = 0x06u, ['h'] = 0x06u, ['i'] = 0x06u, ['j'] = 0x06u, ['k'] = 0x06u, ['l'] = 0x06u, ['m'] = 0x06u, ['n'] = 0x06u, ['o'] = 0x06u, ['p'] = 0x06u, ['q'] = 0x06u, ['r'] = 0x06u, ['s'] = 0x06u, ['t'] = 0x06u, ['u'] = 0x06u, ['v'] = 0x06u, ['w'] = 0x06u, ['x'] = 0x06u, ['y'] = 0x06u, ['z'] = 0x06u };
 
 /* regex:    "(?x) [a-z]+ # letters"
  * flags:    "x"
  * encoding: utf8
- * engine:   bitnfa (uint8_t)
+ * engine:   bitnfa (uint16_t)
  */
 bool regex_match(const char *input, size_t len) {
-    uint8_t state = 0x02u;
+    uint16_t state = 0x0001u;
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
-        uint8_t next = 0;
-        if (state & 0x02u) next |= regex_trans_1[b];
+        uint16_t next = 0;
+        if (state & 0x0001u) next |= ((b == ' ') ? 0x0002u : 0u);
+        if (state & 0x0002u) next |= regex_trans_1[b];
+        if (state & 0x0004u) next |= ((b == ' ') ? 0x0008u : 0u);
+        if (state & 0x0008u) next |= ((b == '#') ? 0x0010u : 0u);
+        if (state & 0x0010u) next |= ((b == ' ') ? 0x0020u : 0u);
+        if (state & 0x0020u) next |= ((b == 'l') ? 0x0040u : 0u);
+        if (state & 0x0040u) next |= ((b == 'e') ? 0x0080u : 0u);
+        if (state & 0x0080u) next |= ((b == 't') ? 0x0100u : 0u);
+        if (state & 0x0100u) next |= ((b == 't') ? 0x0200u : 0u);
+        if (state & 0x0200u) next |= ((b == 'e') ? 0x0400u : 0u);
+        if (state & 0x0400u) next |= ((b == 'r') ? 0x0800u : 0u);
+        if (state & 0x0800u) next |= ((b == 's') ? 0x1000u : 0u);
         state = next;
     }
-    return (state & 0x01u) != 0;
+    return (state & 0x1000u) != 0;
 }
