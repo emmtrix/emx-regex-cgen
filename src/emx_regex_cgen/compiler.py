@@ -1367,6 +1367,215 @@ def _reduce_to_position_nfa(
     }
 
 
+def _reduce_to_position_nfa_boundary(
+    builder: NFABuilder, start: int, accept: int
+) -> dict:
+    r"""Reduce a Thompson NFA with ``\b`` / ``\B`` to a position NFA.
+
+    Each original position *p* is doubled into two copies:
+
+    * ``2*p``     – "previous byte was **non-word**" variant
+    * ``2*p + 1`` – "previous byte was **word**" variant
+
+    Boundary epsilons are evaluated via :func:`_cond_eps_closure` during
+    transition-mask construction so that the resulting position NFA is
+    epsilon-free yet correctly encodes word-boundary semantics.
+
+    Unlike :func:`_reduce_to_position_nfa`, positions include the start
+    state and boundary-epsilon source states in addition to byte-states
+    and the accept state.  These extra positions carry no byte transitions
+    of their own but participate via the conditional epsilon expansion
+    that precedes every byte-transition step.
+    """
+
+    eps = builder.epsilon
+    beps = builder.boundary_epsilon
+
+    # -- Step 1: identify positions ----------------------------------------
+    # Byte-states: states with outgoing byte transitions.
+    byte_states: set[int] = set()
+    for src, _b in builder.transitions:
+        byte_states.add(src)
+
+    # Boundary-epsilon source states need their own positions so they can
+    # be tracked after a byte is consumed and later evaluated at end-of-
+    # string (or before the next byte) via _cond_eps_closure.
+    boundary_sources: set[int] = set(beps)
+
+    all_positions = sorted(byte_states | {accept} | {start} | boundary_sources)
+    old_to_new = {s: i for i, s in enumerate(all_positions)}
+    num_orig = len(all_positions)
+
+    state_bytes: dict[int, set[int]] = {}
+    for src, b in builder.transitions:
+        state_bytes.setdefault(src, set()).add(b)
+
+    # Doubled layout: 2*p = non-word variant, 2*p+1 = word variant
+    num_positions = 2 * num_orig
+
+    # -- Step 2: initial bitset (start of string ⇒ prev_was_word = False) --
+    start_closure = _epsilon_closure({start}, eps)
+    initial_bits = 0
+    for s in start_closure:
+        if s in old_to_new:
+            # Only non-word variant (even index) is initially active
+            initial_bits |= 1 << (2 * old_to_new[s])
+
+    # -- Step 3: accept bitset --
+    # At end-of-string the "next" context is non-word.
+    # A doubled position is accepting if the Thompson accept state is
+    # reachable via conditional epsilon closure with the appropriate
+    # (prev_word, curr_word=False) parameters.
+    accept_bits = 0
+    for s in all_positions:
+        p = old_to_new[s]
+        # non-word variant (prev_word=False)
+        cl_nw = _cond_eps_closure({s}, eps, beps, False, False)
+        if accept in cl_nw:
+            accept_bits |= 1 << (2 * p)
+        # word variant (prev_word=True)
+        cl_w = _cond_eps_closure({s}, eps, beps, True, False)
+        if accept in cl_w:
+            accept_bits |= 1 << (2 * p + 1)
+
+    # -- Step 4: transition masks -----------------------------------------
+    # For each position, expand through _cond_eps_closure *before* following
+    # byte transitions – mirroring the DFA boundary construction.  This
+    # means the set of active bytes comes from the *expanded* set, not just
+    # from the position's own byte transitions.
+    trans_masks: list[dict[int, int]] = [{} for _ in range(num_positions)]
+
+    for old_s in all_positions:
+        orig_p = old_to_new[old_s]
+        for prev_word in (False, True):
+            src_pos = 2 * orig_p + (1 if prev_word else 0)
+
+            # Pre-compute conditional closures for word / non-word next
+            expanded_w = _cond_eps_closure(
+                {old_s}, eps, beps, prev_word, True,
+            )
+            expanded_nw = _cond_eps_closure(
+                {old_s}, eps, beps, prev_word, False,
+            )
+
+            # Collect active bytes from both expansions
+            active: set[int] = set()
+            for s in expanded_w:
+                if s in state_bytes:
+                    active |= state_bytes[s]
+            for s in expanded_nw:
+                if s in state_bytes:
+                    active |= state_bytes[s]
+
+            masks: dict[int, int] = {}
+            for b in active:
+                curr_word = b in _WORD
+                expanded = expanded_w if curr_word else expanded_nw
+
+                # Follow byte transition from expanded states
+                dests: set[int] = set()
+                for es in expanded:
+                    dests |= builder.transitions.get((es, b), set())
+                if not dests:
+                    continue
+                # Regular epsilon closure after consuming the byte
+                closure = _epsilon_closure(dests, eps)
+                bits = 0
+                for s in closure:
+                    if s in old_to_new:
+                        q = old_to_new[s]
+                        # Target variant depends on whether byte b is word
+                        if curr_word:
+                            bits |= 1 << (2 * q + 1)
+                        else:
+                            bits |= 1 << (2 * q)
+                if bits:
+                    masks[b] = bits
+            trans_masks[src_pos] = masks
+
+    # -- Step 5: reachability pruning using bitset arithmetic ---------------
+    #  (a) Forward reachability from initial set.
+    reachable = initial_bits
+    prev = 0
+    while reachable != prev:
+        prev = reachable
+        p = reachable
+        while p:
+            pos = (p & -p).bit_length() - 1
+            p &= p - 1
+            for bits in trans_masks[pos].values():
+                reachable |= bits
+
+    #  (b) Backward reachability from accept positions.
+    reverse_adj: list[int] = [0] * num_positions
+    for p in range(num_positions):
+        for bits in trans_masks[p].values():
+            b = bits
+            while b:
+                q = (b & -b).bit_length() - 1
+                b &= b - 1
+                reverse_adj[q] |= 1 << p
+
+    productive = accept_bits
+    prev = 0
+    while productive != prev:
+        prev = productive
+        p = productive
+        while p:
+            pos = (p & -p).bit_length() - 1
+            p &= p - 1
+            productive |= reverse_adj[pos]
+
+    keep_mask = reachable & productive
+    keep = []
+    m = keep_mask
+    while m:
+        pos = (m & -m).bit_length() - 1
+        m &= m - 1
+        keep.append(pos)
+
+    # -- Step 6: renumber if any positions were pruned ----------------------
+    if len(keep) < num_positions:
+        remap = {old: new for new, old in enumerate(keep)}
+        num_positions = len(keep)
+
+        new_initial = 0
+        for old in keep:
+            if initial_bits & (1 << old):
+                new_initial |= 1 << remap[old]
+
+        new_accept = 0
+        for old in keep:
+            if accept_bits & (1 << old):
+                new_accept |= 1 << remap[old]
+
+        new_trans: list[dict[int, int]] = []
+        for old in keep:
+            masks = trans_masks[old]
+            remapped: dict[int, int] = {}
+            for b, bits in masks.items():
+                new_bits = 0
+                remaining = bits & keep_mask
+                while remaining:
+                    q = (remaining & -remaining).bit_length() - 1
+                    remaining &= remaining - 1
+                    new_bits |= 1 << remap[q]
+                if new_bits:
+                    remapped[b] = new_bits
+            new_trans.append(remapped)
+
+        initial_bits = new_initial
+        accept_bits = new_accept
+        trans_masks = new_trans
+
+    return {
+        "num_positions": num_positions,
+        "initial": initial_bits,
+        "accept": accept_bits,
+        "trans_masks": trans_masks,
+    }
+
+
 def compile_nfa(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
     """Compile *pattern* to NFA data for bit-parallel simulation.
 
@@ -1386,12 +1595,9 @@ def compile_nfa(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
     builder, start, accept = _build_nfa(pattern, flags, encoding)
 
     if builder.has_boundary:
-        raise ValueError(
-            r"\b / \B word-boundary assertions are not supported "
-            "by the bitnfa engine"
-        )
-
-    nfa = _reduce_to_position_nfa(builder, start, accept)
+        nfa = _reduce_to_position_nfa_boundary(builder, start, accept)
+    else:
+        nfa = _reduce_to_position_nfa(builder, start, accept)
 
     if nfa["num_positions"] > _MAX_BITNFA_POSITIONS:
         raise ValueError(
