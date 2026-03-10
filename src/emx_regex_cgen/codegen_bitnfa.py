@@ -35,6 +35,23 @@ def _byte_designator(b: int) -> str:
     return f"[{b}]"
 
 
+def _byte_cmp_lit(b: int) -> str:
+    """Return a C character literal suitable for use in a comparison (b == …)."""
+    if 32 <= b <= 126:
+        c = chr(b)
+        if c == "'":
+            return "'\\''"
+        if c == "\\":
+            return "'\\\\'"
+        return f"'{c}'"
+    return str(b)
+
+
+def _is_single_bit(v: int) -> bool:
+    """Return True iff *v* is a positive power of two (exactly one bit set)."""
+    return v > 0 and (v & (v - 1)) == 0
+
+
 def _build_main(func_name: str) -> str:
     lines = [
         "int main(int argc, char *argv[]) {",
@@ -66,12 +83,30 @@ def _emit_single_word(
 
     active_positions = [p for p in range(num_pos) if trans_masks[p]]
 
+    # Pre-classify each active position: can it be replaced by an inline
+    # comparison expression?  A position qualifies when its transition map
+    # has exactly one non-zero entry whose value is a power of two
+    # (single destination bit).  In that case we emit
+    #   next |= ((pos_type)(b == c) << k);
+    # instead of a 256-byte lookup table.
+    inline: dict[int, tuple[int, str, int]] = {}  # p -> (byte, pos_type, shift)
+    for p in active_positions:
+        masks = trans_masks[p]
+        non_zero = [(b, v) for b, v in masks.items() if v != 0]
+        if len(non_zero) == 1:
+            b_val, v = non_zero[0]
+            if _is_single_bit(v):
+                pos_type, _ = _min_type(v)
+                inline[p] = (b_val, pos_type, v.bit_length() - 1)
+
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
         includes.extend(["string.h", "stdio.h"])
 
     global_lines: list[str] = []
     for p in active_positions:
+        if p in inline:
+            continue  # replaced by inline expression; no table needed
         masks = trans_masks[p]
         max_val = max(masks.values(), default=0)
         pos_type, pos_bits = _min_type(max_val)
@@ -104,9 +139,13 @@ def _emit_single_word(
     match_lines.append("        unsigned char b = (unsigned char)input[i];")
     match_lines.append(f"        {state_t} next = 0;")
     for p in active_positions:
-        match_lines.append(
-            f"        if (state & {_mask_lit(1 << p, bits)}) next |= {prefix}_trans_{p}[b];"
-        )
+        state_check = f"state & {_mask_lit(1 << p, bits)}"
+        if p in inline:
+            b_val, pos_type, shift = inline[p]
+            rhs = f"(({pos_type})(b == {_byte_cmp_lit(b_val)}) << {shift}u)"
+        else:
+            rhs = f"{prefix}_trans_{p}[b]"
+        match_lines.append(f"        if ({state_check}) next |= {rhs};")
     match_lines.append("        state = next;")
     match_lines.append("    }")
     match_lines.append(f"    return (state & {_mask_lit(accept, bits)}) != 0;")
@@ -143,12 +182,27 @@ def _emit_array_variant(
     accept_words = to_words(accept)
     active_positions = [p for p in range(num_pos) if trans_masks[p]]
 
+    # Pre-classify: positions with a single non-zero entry whose value is a
+    # power of two (one destination bit) can be emitted as an inline
+    # comparison instead of a 2-D lookup table.
+    inline: dict[int, tuple[int, int, int]] = {}  # p -> (byte, word_idx, bit_in_word)
+    for p in active_positions:
+        masks = trans_masks[p]
+        non_zero = [(b, v) for b, v in masks.items() if v != 0]
+        if len(non_zero) == 1:
+            b_val, v = non_zero[0]
+            if _is_single_bit(v):
+                bit_pos = v.bit_length() - 1
+                inline[p] = (b_val, bit_pos // 32, bit_pos % 32)
+
     includes = ["stddef.h", "stdbool.h", "stdint.h"]
     if emit_main:
         includes.extend(["string.h", "stdio.h"])
 
     global_lines: list[str] = []
     for p in active_positions:
+        if p in inline:
+            continue  # replaced by inline expression; no table needed
         masks = trans_masks[p]
         non_zero = sorted((b, v) for b, v in masks.items() if v != 0)
         if not non_zero:
@@ -190,9 +244,15 @@ def _emit_array_variant(
         word_idx = p // 32
         bit_idx = p % 32
         bit_mask = f"0x{1 << bit_idx:08x}u"
-        assigns = " ".join(
-            f"n{w} |= {prefix}_trans_{p}[b][{w}];" for w in range(num_words)
-        )
+        if p in inline:
+            b_val, dest_word, dest_bit = inline[p]
+            assigns = (
+                f"n{dest_word} |= ((uint32_t)(b == {_byte_cmp_lit(b_val)}) << {dest_bit}u);"
+            )
+        else:
+            assigns = " ".join(
+                f"n{w} |= {prefix}_trans_{p}[b][{w}];" for w in range(num_words)
+            )
         match_lines.append(f"        if (s{word_idx} & {bit_mask}) {{ {assigns} }}")
     for w in range(num_words):
         match_lines.append(f"        s{w} = n{w};")

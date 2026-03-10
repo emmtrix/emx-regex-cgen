@@ -4,23 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_0[256] = { ['a'] = 0x02u };
-static const uint8_t regex_trans_1[256] = { ['b'] = 0x04u };
-static const uint8_t regex_trans_2[256] = { ['c'] = 0x08u };
-static const uint8_t regex_trans_3[256] = { ['d'] = 0x10u };
-static const uint8_t regex_trans_4[256] = { ['e'] = 0x20u };
-static const uint8_t regex_trans_5[256] = { ['f'] = 0x40u };
-static const uint8_t regex_trans_6[256] = { ['g'] = 0x80u };
-static const uint16_t regex_trans_7[256] = { ['h'] = 0x0100u };
-static const uint16_t regex_trans_8[256] = { ['i'] = 0x0200u };
-static const uint16_t regex_trans_9[256] = { ['j'] = 0x0400u };
-static const uint16_t regex_trans_10[256] = { ['k'] = 0x0800u };
-static const uint16_t regex_trans_11[256] = { ['l'] = 0x1000u };
-static const uint16_t regex_trans_12[256] = { ['m'] = 0x2000u };
-static const uint16_t regex_trans_13[256] = { ['n'] = 0x4000u };
-static const uint16_t regex_trans_14[256] = { ['o'] = 0x8000u };
-static const uint32_t regex_trans_15[256] = { ['p'] = 0x00010000u };
-static const uint32_t regex_trans_16[256] = { ['q'] = 0x00020000u };
+
 
 /* regex:    "abcdefghijklmnopq"
  * flags:    ""
@@ -32,23 +16,23 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint32_t next = 0;
-        if (state & 0x00000001u) next |= regex_trans_0[b];
-        if (state & 0x00000002u) next |= regex_trans_1[b];
-        if (state & 0x00000004u) next |= regex_trans_2[b];
-        if (state & 0x00000008u) next |= regex_trans_3[b];
-        if (state & 0x00000010u) next |= regex_trans_4[b];
-        if (state & 0x00000020u) next |= regex_trans_5[b];
-        if (state & 0x00000040u) next |= regex_trans_6[b];
-        if (state & 0x00000080u) next |= regex_trans_7[b];
-        if (state & 0x00000100u) next |= regex_trans_8[b];
-        if (state & 0x00000200u) next |= regex_trans_9[b];
-        if (state & 0x00000400u) next |= regex_trans_10[b];
-        if (state & 0x00000800u) next |= regex_trans_11[b];
-        if (state & 0x00001000u) next |= regex_trans_12[b];
-        if (state & 0x00002000u) next |= regex_trans_13[b];
-        if (state & 0x00004000u) next |= regex_trans_14[b];
-        if (state & 0x00008000u) next |= regex_trans_15[b];
-        if (state & 0x00010000u) next |= regex_trans_16[b];
+        if (state & 0x00000001u) next |= ((uint8_t)(b == 'a') << 1u);
+        if (state & 0x00000002u) next |= ((uint8_t)(b == 'b') << 2u);
+        if (state & 0x00000004u) next |= ((uint8_t)(b == 'c') << 3u);
+        if (state & 0x00000008u) next |= ((uint8_t)(b == 'd') << 4u);
+        if (state & 0x00000010u) next |= ((uint8_t)(b == 'e') << 5u);
+        if (state & 0x00000020u) next |= ((uint8_t)(b == 'f') << 6u);
+        if (state & 0x00000040u) next |= ((uint8_t)(b == 'g') << 7u);
+        if (state & 0x00000080u) next |= ((uint16_t)(b == 'h') << 8u);
+        if (state & 0x00000100u) next |= ((uint16_t)(b == 'i') << 9u);
+        if (state & 0x00000200u) next |= ((uint16_t)(b == 'j') << 10u);
+        if (state & 0x00000400u) next |= ((uint16_t)(b == 'k') << 11u);
+        if (state & 0x00000800u) next |= ((uint16_t)(b == 'l') << 12u);
+        if (state & 0x00001000u) next |= ((uint16_t)(b == 'm') << 13u);
+        if (state & 0x00002000u) next |= ((uint16_t)(b == 'n') << 14u);
+        if (state & 0x00004000u) next |= ((uint16_t)(b == 'o') << 15u);
+        if (state & 0x00008000u) next |= ((uint32_t)(b == 'p') << 16u);
+        if (state & 0x00010000u) next |= ((uint32_t)(b == 'q') << 17u);
         state = next;
     }
     return (state & 0x00020000u) != 0;

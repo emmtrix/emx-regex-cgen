@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_1[256] = { [195] = 0x04u };
 static const uint8_t regex_trans_2[256] = { [169] = 0x03u };
 
 /* regex:    "\x{00e9}+"
@@ -17,7 +16,7 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x02u) next |= regex_trans_1[b];
+        if (state & 0x02u) next |= ((uint8_t)(b == 195) << 2u);
         if (state & 0x04u) next |= regex_trans_2[b];
         state = next;
     }

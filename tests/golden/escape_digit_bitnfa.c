@@ -8,10 +8,8 @@ static const uint8_t regex_trans_0[256] = { ['0'] = 0x02u, ['1'] = 0x02u, ['2'] 
 static const uint8_t regex_trans_1[256] = { ['0'] = 0x04u, ['1'] = 0x04u, ['2'] = 0x04u, ['3'] = 0x04u, ['4'] = 0x04u, ['5'] = 0x04u, ['6'] = 0x04u, ['7'] = 0x04u, ['8'] = 0x04u, ['9'] = 0x04u };
 static const uint8_t regex_trans_2[256] = { ['0'] = 0x08u, ['1'] = 0x08u, ['2'] = 0x08u, ['3'] = 0x08u, ['4'] = 0x08u, ['5'] = 0x08u, ['6'] = 0x08u, ['7'] = 0x08u, ['8'] = 0x08u, ['9'] = 0x08u };
 static const uint8_t regex_trans_3[256] = { ['0'] = 0x10u, ['1'] = 0x10u, ['2'] = 0x10u, ['3'] = 0x10u, ['4'] = 0x10u, ['5'] = 0x10u, ['6'] = 0x10u, ['7'] = 0x10u, ['8'] = 0x10u, ['9'] = 0x10u };
-static const uint8_t regex_trans_4[256] = { ['-'] = 0x20u };
 static const uint8_t regex_trans_5[256] = { ['0'] = 0x40u, ['1'] = 0x40u, ['2'] = 0x40u, ['3'] = 0x40u, ['4'] = 0x40u, ['5'] = 0x40u, ['6'] = 0x40u, ['7'] = 0x40u, ['8'] = 0x40u, ['9'] = 0x40u };
 static const uint8_t regex_trans_6[256] = { ['0'] = 0x80u, ['1'] = 0x80u, ['2'] = 0x80u, ['3'] = 0x80u, ['4'] = 0x80u, ['5'] = 0x80u, ['6'] = 0x80u, ['7'] = 0x80u, ['8'] = 0x80u, ['9'] = 0x80u };
-static const uint16_t regex_trans_7[256] = { ['-'] = 0x0100u };
 static const uint16_t regex_trans_8[256] = { ['0'] = 0x0200u, ['1'] = 0x0200u, ['2'] = 0x0200u, ['3'] = 0x0200u, ['4'] = 0x0200u, ['5'] = 0x0200u, ['6'] = 0x0200u, ['7'] = 0x0200u, ['8'] = 0x0200u, ['9'] = 0x0200u };
 static const uint16_t regex_trans_9[256] = { ['0'] = 0x0400u, ['1'] = 0x0400u, ['2'] = 0x0400u, ['3'] = 0x0400u, ['4'] = 0x0400u, ['5'] = 0x0400u, ['6'] = 0x0400u, ['7'] = 0x0400u, ['8'] = 0x0400u, ['9'] = 0x0400u };
 
@@ -29,10 +27,10 @@ bool regex_match(const char *input, size_t len) {
         if (state & 0x0002u) next |= regex_trans_1[b];
         if (state & 0x0004u) next |= regex_trans_2[b];
         if (state & 0x0008u) next |= regex_trans_3[b];
-        if (state & 0x0010u) next |= regex_trans_4[b];
+        if (state & 0x0010u) next |= ((uint8_t)(b == '-') << 5u);
         if (state & 0x0020u) next |= regex_trans_5[b];
         if (state & 0x0040u) next |= regex_trans_6[b];
-        if (state & 0x0080u) next |= regex_trans_7[b];
+        if (state & 0x0080u) next |= ((uint16_t)(b == '-') << 8u);
         if (state & 0x0100u) next |= regex_trans_8[b];
         if (state & 0x0200u) next |= regex_trans_9[b];
         state = next;

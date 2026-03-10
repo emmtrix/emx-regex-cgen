@@ -4,11 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_0[256] = { ['h'] = 0x02u };
-static const uint8_t regex_trans_1[256] = { ['e'] = 0x04u };
-static const uint8_t regex_trans_2[256] = { ['l'] = 0x08u };
-static const uint8_t regex_trans_3[256] = { ['l'] = 0x10u };
-static const uint8_t regex_trans_4[256] = { ['o'] = 0x20u };
+
 
 /* regex:    "hello"
  * flags:    ""
@@ -20,11 +16,11 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x01u) next |= regex_trans_0[b];
-        if (state & 0x02u) next |= regex_trans_1[b];
-        if (state & 0x04u) next |= regex_trans_2[b];
-        if (state & 0x08u) next |= regex_trans_3[b];
-        if (state & 0x10u) next |= regex_trans_4[b];
+        if (state & 0x01u) next |= ((uint8_t)(b == 'h') << 1u);
+        if (state & 0x02u) next |= ((uint8_t)(b == 'e') << 2u);
+        if (state & 0x04u) next |= ((uint8_t)(b == 'l') << 3u);
+        if (state & 0x08u) next |= ((uint8_t)(b == 'l') << 4u);
+        if (state & 0x10u) next |= ((uint8_t)(b == 'o') << 5u);
         state = next;
     }
     return (state & 0x20u) != 0;

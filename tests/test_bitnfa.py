@@ -39,7 +39,8 @@ def _run(exe: Path, inp: str) -> bool:
 
 def test_variant_uint8() -> None:
     """Pattern with ≤8 NFA positions must use uint8_t."""
-    nfa = compile_nfa("ab")
+    # Use a multi-entry pattern (\d{3}) to exercise the 256-byte table path.
+    nfa = compile_nfa(r"\d{3}")
     assert nfa["num_positions"] <= 8
     code = generate_bitnfa_c_code(nfa).render()
     assert "uint8_t" in code
@@ -48,7 +49,8 @@ def test_variant_uint8() -> None:
 
 def test_variant_uint16() -> None:
     """Pattern with 9-16 NFA positions must use uint16_t."""
-    nfa = compile_nfa("helloworld")
+    # Use a multi-entry pattern (\d{9}) to exercise the 256-byte table path.
+    nfa = compile_nfa(r"\d{9}")
     assert 8 < nfa["num_positions"] <= 16
     code = generate_bitnfa_c_code(nfa).render()
     assert "uint16_t" in code
@@ -67,7 +69,8 @@ def test_variant_uint32() -> None:
 
 def test_variant_uint32_array() -> None:
     """Pattern with >32 NFA positions must use uint32_t array."""
-    nfa = compile_nfa("a{33}")
+    # Use a multi-entry pattern (\d{33}) to exercise the 2-D table path.
+    nfa = compile_nfa(r"\d{33}")
     assert nfa["num_positions"] > 32
     code = generate_bitnfa_c_code(nfa).render()
     m = re.search(r"regex_trans_\d+\[256\]\[(\d+)\]", code)
@@ -106,10 +109,80 @@ def test_hot_loop_unrolled_uint32_array() -> None:
 
 def test_prefix() -> None:
     """Custom prefix must be used for table and function names."""
-    code = generate("ab", engine="bitnfa", prefix="my_re").render()
+    # Use \d which has a multi-entry table to verify the prefix appears in the
+    # table name; "ab" would have no table at all due to the inline optimisation.
+    code = generate(r"\d", engine="bitnfa", prefix="my_re").render()
     assert "my_re_trans" in code
     assert "my_re_match" in code
     assert "regex_" not in code
+
+
+# ---------------------------------------------------------------------------
+# Single-bit inline optimisation
+# ---------------------------------------------------------------------------
+
+
+def test_inline_opt_no_table_for_single_bit_positions() -> None:
+    """Positions with one non-zero power-of-two entry must not emit a table."""
+    # "ab" has two positions each mapping one byte to a single-bit mask.
+    nfa = compile_nfa("ab")
+    code = generate_bitnfa_c_code(nfa).render()
+    assert not re.search(r"regex_trans_\d+\[256\]", code), (
+        "Expected no 256-byte tables for 'ab' (all positions are single-bit)"
+    )
+    assert "(b == 'a')" in code
+    assert "(b == 'b')" in code
+
+
+def test_inline_opt_tables_preserved_for_multi_entry_positions() -> None:
+    """Positions with multiple non-zero entries must still use a table."""
+    # "\d{3}" has three digit positions each with 10 byte entries; none qualify.
+    nfa = compile_nfa(r"\d{3}")
+    code = generate_bitnfa_c_code(nfa).render()
+    assert re.search(r"regex_trans_\d+\[256\]", code), (
+        "Expected 256-byte tables for '\\d{3}' (multi-entry digit positions)"
+    )
+    assert "(b == " not in code, "Unexpected inline expression for multi-entry position"
+
+
+def test_inline_opt_mixed_pattern() -> None:
+    r"""Mixed patterns emit both tables (multi-entry) and inline exprs (single-bit)."""
+    # "\d{4}-\d{2}-\d{2}": digit positions have 10 entries (tables), while the
+    # two '-' positions each have a single byte mapping to a power-of-two mask.
+    nfa = compile_nfa(r"\d{4}-\d{2}-\d{2}")
+    code = generate_bitnfa_c_code(nfa).render()
+    assert re.search(r"regex_trans_\d+\[256\]", code), "Digit positions must keep tables"
+    assert "(b == '-')" in code, "'-' positions must use inline comparison"
+
+
+def test_inline_opt_array_variant() -> None:
+    """Single-bit positions in the uint32_array variant also use inline expressions."""
+    # "abcdefghijklmnopqrstuvwxyz012345" has 36 unique chars → >32 positions,
+    # each position mapping exactly one byte to a single-bit mask.
+    nfa = compile_nfa("abcdefghijklmnopqrstuvwxyz012345")
+    assert nfa["num_positions"] > 32
+    code = generate_bitnfa_c_code(nfa).render()
+    assert not re.search(r"regex_trans_\d+\[256\]\[\d+\]", code), (
+        "Expected no 2-D tables for single-unique-char pattern in array variant"
+    )
+    assert "(b == 'a')" in code
+
+
+def test_inline_opt_functional_correctness(tmp_path: Path) -> None:
+    """Patterns using the inline optimisation must still match correctly."""
+    # "hello" and "ab" have all-inline transitions; verify compile+run.
+    cases = [
+        ("hello", ["hello"], ["hell", "helloo", ""]),
+        ("ab", ["ab"], ["a", "b", "abc", ""]),
+    ]
+    for i, (pattern, matches, rejects) in enumerate(cases):
+        sub = tmp_path / str(i)
+        sub.mkdir()
+        exe = _build(pattern, sub)
+        for inp in matches:
+            assert _run(exe, inp), f"{pattern!r} should match {inp!r}"
+        for inp in rejects:
+            assert not _run(exe, inp), f"{pattern!r} should not match {inp!r}"
 
 
 # ---------------------------------------------------------------------------

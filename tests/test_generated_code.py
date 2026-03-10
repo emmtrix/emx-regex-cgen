@@ -95,7 +95,8 @@ def test_globals_contains_transition_table_dfa() -> None:
 
 def test_globals_contains_transition_table_bitnfa() -> None:
     """globals must contain the bitnfa transition table declaration."""
-    result = generate("hello", engine="bitnfa")
+    # Use \d which has multi-entry digit tables that are not inlined.
+    result = generate(r"\d", engine="bitnfa")
     assert "regex_trans" in result.globals
     assert "static const" in result.globals
 
@@ -253,9 +254,9 @@ def test_render_ends_with_newline() -> None:
         ("hello", {"alphabet_compression": "yes"}),
         ("hello", {"row_dedup": "yes"}),
         ("hello", {"early_exit": True}),
-        ("hello", {"engine": "bitnfa"}),
+        (r"\d", {"engine": "bitnfa"}),
         (r"\d+", {"engine": "bitnfa", "emit_main": True}),
-        ("a{33}", {"engine": "bitnfa"}),
+        (r"\d{33}", {"engine": "bitnfa"}),
     ],
 )
 def test_render_sections_order(pattern: str, kwargs: dict) -> None:

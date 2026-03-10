@@ -6,7 +6,6 @@
 
 static const uint8_t regex_trans_0[256] = { ['a'] = 0x06u };
 static const uint8_t regex_trans_1[256] = { ['b'] = 0x06u };
-static const uint8_t regex_trans_2[256] = { ['c'] = 0x08u };
 
 /* regex:    "ab*c"
  * flags:    ""
@@ -20,7 +19,7 @@ bool regex_match(const char *input, size_t len) {
         uint8_t next = 0;
         if (state & 0x01u) next |= regex_trans_0[b];
         if (state & 0x02u) next |= regex_trans_1[b];
-        if (state & 0x04u) next |= regex_trans_2[b];
+        if (state & 0x04u) next |= ((uint8_t)(b == 'c') << 3u);
         state = next;
     }
     return (state & 0x08u) != 0;

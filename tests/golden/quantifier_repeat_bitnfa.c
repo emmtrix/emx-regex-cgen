@@ -4,10 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static const uint8_t regex_trans_0[256] = { ['a'] = 0x02u };
 static const uint8_t regex_trans_1[256] = { ['a'] = 0x1cu };
 static const uint8_t regex_trans_2[256] = { ['a'] = 0x18u };
-static const uint8_t regex_trans_4[256] = { ['a'] = 0x08u };
 
 /* regex:    "a{2,4}"
  * flags:    ""
@@ -19,10 +17,10 @@ bool regex_match(const char *input, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char b = (unsigned char)input[i];
         uint8_t next = 0;
-        if (state & 0x01u) next |= regex_trans_0[b];
+        if (state & 0x01u) next |= ((uint8_t)(b == 'a') << 1u);
         if (state & 0x02u) next |= regex_trans_1[b];
         if (state & 0x04u) next |= regex_trans_2[b];
-        if (state & 0x10u) next |= regex_trans_4[b];
+        if (state & 0x10u) next |= ((uint8_t)(b == 'a') << 3u);
         state = next;
     }
     return (state & 0x08u) != 0;
