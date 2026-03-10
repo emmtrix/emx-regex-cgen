@@ -30,8 +30,10 @@ from tests._support import build_matcher, run_matcher
         (r"\ba", "", "a", True),
 
         # --- \B (non-boundary) ---
-        (r"a\Bb", "", "ab", True),
-        (r"a\Bb", "", "a b", False),
+        (r"a\Bb", "", "ab", True),   # word-word ⇒ no boundary ⇒ \B succeeds
+        (r"a\Bb", "", "a b", False),  # word-nonword ⇒ boundary ⇒ \B fails
+        (r"a\B.", "", "ab", True),   # word-word ⇒ no boundary ⇒ \B succeeds
+        (r"a\B.", "", "a ", False),  # word-nonword ⇒ boundary ⇒ \B fails
 
         # --- \b with character classes ---
         (r"\b\w+\b", "", "hello", True),
@@ -46,9 +48,12 @@ from tests._support import build_matcher, run_matcher
         (r"\b.*\b", "", "hello", True),
 
         # --- \b...\B ---
-        (r"\b...\B", "", "ab ", True),
-        (r"\b...\B", "", "abc", False),
-        (r"\b...\B", "", "   ", False),
+        # \b at start checks start-of-string vs first byte;
+        # \B at end checks last byte vs end-of-string (non-word).
+        (r"\b...\B", "", "ab ", True),   # \b: start→word=bnd, \B: nw→end(nw)=non-bnd
+        (r"\b...\B", "", "abc", False),  # \B: 'c'(word)→end(nw)=boundary ⇒ fails
+        (r"\b...\B", "", "   ", False),  # \b: start(nw)→' '(nw)=non-boundary ⇒ fails
+        (r"\b...\B", "", "ab!", True),   # \B: '!'(nw)→end(nw)=non-boundary ⇒ succeeds
 
         # --- Mixed boundary / non-boundary ---
         (r"\bthe cat\b", "", "the cat", True),
