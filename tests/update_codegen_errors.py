@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import warnings
 from pathlib import Path
@@ -20,6 +21,10 @@ from emx_regex_cgen import generate  # noqa: E402
 
 
 def _format_exception(exc: Exception) -> str:
+    # Use "error" for re.error regardless of Python version (3.13 renamed it
+    # to re.PatternError, which changes type(exc).__name__).
+    if isinstance(exc, re.error):
+        return f"error: {exc}"
     return f"{type(exc).__name__}: {exc}"
 
 

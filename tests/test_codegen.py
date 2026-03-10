@@ -13,6 +13,7 @@ filtered for re2 compatibility.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -22,6 +23,10 @@ from tests._support import build_matcher, run_matcher
 
 
 def _format_exception(exc: Exception) -> str:
+    # Use "error" for re.error regardless of Python version (3.13 renamed it
+    # to re.PatternError, which changes type(exc).__name__).
+    if isinstance(exc, re.error):
+        return f"error: {exc}"
     return f"{type(exc).__name__}: {exc}"
 
 

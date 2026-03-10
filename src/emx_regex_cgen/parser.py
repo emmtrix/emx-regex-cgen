@@ -132,13 +132,33 @@ class _Parser:
                 self.pos = saved
                 break
             while not self._at_end and self._peek() in "imsx":
-                self._advance()
+                ch = self._advance()
+                if ch == "x":
+                    self.flags |= _re.VERBOSE
             if self._peek() == ")":
                 self._advance()
                 continue
             # Not a bare flag directive (could be ``(?i:...)``) — backtrack.
             self.pos = saved
             break
+
+    # -- verbose-mode helpers ------------------------------------------------
+
+    def _skip_verbose(self) -> None:
+        """When VERBOSE is active, skip whitespace and ``#`` comments."""
+        if not (self.flags & _re.VERBOSE):
+            return
+        while not self._at_end:
+            ch = self._peek()
+            if ch is not None and ch in " \t\n\r\v\f":
+                self._advance()
+            elif ch == "#":
+                while not self._at_end and self._peek() != "\n":
+                    self._advance()
+                if not self._at_end:
+                    self._advance()  # consume '\n'
+            else:
+                break
 
     # -- grammar -------------------------------------------------------------
 
@@ -155,12 +175,14 @@ class _Parser:
     def _branch(self) -> list:
         """``branch → piece*``"""
         items: list = []
+        self._skip_verbose()
         while not self._at_end and self._peek() not in ("|", ")"):
             result = self._piece()
             if isinstance(result, list):
                 items.extend(result)
             else:
                 items.append(result)
+            self._skip_verbose()
         return items
 
     def _piece(self):
