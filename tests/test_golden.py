@@ -32,6 +32,9 @@ CASES: list[tuple[str, str, dict]] = [
     ("escape_space.c",         r"\s+",                    {}),
     ("unicode.c",              r"\x{00e9}+",              {}),
     ("anchors.c",              r"^start.*end$",           {}),
+    # --- word boundary ---
+    ("word_boundary.c",        r"\bword\b",               {}),
+    ("non_word_boundary.c",    r"a\Bb",                   {}),
     # --- CLI options / flags (DFA) ---
     ("flag_ignorecase.c",      r"[a-z]+",                 {"flags": "i"}),
     ("flag_dotall.c",          r".+",                     {"flags": "s"}),

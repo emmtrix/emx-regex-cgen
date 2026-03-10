@@ -208,6 +208,7 @@ options:
 | Space escape `\s` | `\s+` | [escape\_space.c](tests/golden/escape_space.c) | [escape\_space\_bitnfa.c](tests/golden/escape_space_bitnfa.c) |
 | Unicode / UTF-8 | `\x{00e9}+` | [unicode.c](tests/golden/unicode.c) | [unicode\_bitnfa.c](tests/golden/unicode_bitnfa.c) |
 | Anchors `^` / `$` | `^start.*end$` | [anchors.c](tests/golden/anchors.c) | [anchors\_bitnfa.c](tests/golden/anchors_bitnfa.c) |
+| Word boundary `\b` / `\B` | `\bword\b` | [word\_boundary.c](tests/golden/word_boundary.c) | — |
 
 ### CLI Options
 
