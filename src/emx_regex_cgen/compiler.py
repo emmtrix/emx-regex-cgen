@@ -49,6 +49,9 @@ _MAX_DFA_STATES = 10_000
 # Limit for bit-parallel NFA (generated table is positions × 256 entries)
 _MAX_BITNFA_POSITIONS = 256
 
+# Limit for Thompson NFA states to prevent runaway construction
+_MAX_NFA_STATES = 50_000
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -147,6 +150,10 @@ class NFABuilder:
 
     def _new(self) -> int:
         s = self._next
+        if s >= _MAX_NFA_STATES:
+            raise ValueError(
+                f"NFA state limit exceeded ({_MAX_NFA_STATES})"
+            )
         self._next += 1
         return s
 
