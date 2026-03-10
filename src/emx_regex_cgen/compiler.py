@@ -36,6 +36,8 @@ from .parser import (
     NOT_LITERAL,
     RANGE,
     SUBPATTERN,
+)
+from .parser import (
     parse as _parse_regex,
 )
 
