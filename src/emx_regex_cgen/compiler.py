@@ -1380,17 +1380,29 @@ def _reduce_to_position_nfa_boundary(
     Boundary epsilons are evaluated via :func:`_cond_eps_closure` during
     transition-mask construction so that the resulting position NFA is
     epsilon-free yet correctly encodes word-boundary semantics.
+
+    Unlike :func:`_reduce_to_position_nfa`, positions include the start
+    state and boundary-epsilon source states in addition to byte-states
+    and the accept state.  These extra positions carry no byte transitions
+    of their own but participate via the conditional epsilon expansion
+    that precedes every byte-transition step.
     """
 
     eps = builder.epsilon
     beps = builder.boundary_epsilon
 
-    # -- Step 1: identify byte-states and assign original position ids ------
+    # -- Step 1: identify positions ----------------------------------------
+    # Byte-states: states with outgoing byte transitions.
     byte_states: set[int] = set()
     for src, _b in builder.transitions:
         byte_states.add(src)
 
-    all_positions = sorted(byte_states | {accept})
+    # Boundary-epsilon source states need their own positions so they can
+    # be tracked after a byte is consumed and later evaluated at end-of-
+    # string (or before the next byte) via _cond_eps_closure.
+    boundary_sources: set[int] = set(beps)
+
+    all_positions = sorted(byte_states | {accept} | {start} | boundary_sources)
     old_to_new = {s: i for i, s in enumerate(all_positions)}
     num_orig = len(all_positions)
 
@@ -1427,19 +1439,39 @@ def _reduce_to_position_nfa_boundary(
             accept_bits |= 1 << (2 * p + 1)
 
     # -- Step 4: transition masks -----------------------------------------
+    # For each position, expand through _cond_eps_closure *before* following
+    # byte transitions – mirroring the DFA boundary construction.  This
+    # means the set of active bytes comes from the *expanded* set, not just
+    # from the position's own byte transitions.
     trans_masks: list[dict[int, int]] = [{} for _ in range(num_positions)]
 
     for old_s in all_positions:
         orig_p = old_to_new[old_s]
         for prev_word in (False, True):
             src_pos = 2 * orig_p + (1 if prev_word else 0)
+
+            # Pre-compute conditional closures for word / non-word next
+            expanded_w = _cond_eps_closure(
+                {old_s}, eps, beps, prev_word, True,
+            )
+            expanded_nw = _cond_eps_closure(
+                {old_s}, eps, beps, prev_word, False,
+            )
+
+            # Collect active bytes from both expansions
+            active: set[int] = set()
+            for s in expanded_w:
+                if s in state_bytes:
+                    active |= state_bytes[s]
+            for s in expanded_nw:
+                if s in state_bytes:
+                    active |= state_bytes[s]
+
             masks: dict[int, int] = {}
-            for b in state_bytes.get(old_s, ()):
+            for b in active:
                 curr_word = b in _WORD
-                # Expand current state across boundary epsilons
-                expanded = _cond_eps_closure(
-                    {old_s}, eps, beps, prev_word, curr_word,
-                )
+                expanded = expanded_w if curr_word else expanded_nw
+
                 # Follow byte transition from expanded states
                 dests: set[int] = set()
                 for es in expanded:
@@ -1566,8 +1598,6 @@ def compile_nfa(pattern: str, flags: str = "", encoding: str = "utf8") -> dict:
         nfa = _reduce_to_position_nfa_boundary(builder, start, accept)
     else:
         nfa = _reduce_to_position_nfa(builder, start, accept)
-
-    nfa_ref = nfa
 
     if nfa["num_positions"] > _MAX_BITNFA_POSITIONS:
         raise ValueError(
