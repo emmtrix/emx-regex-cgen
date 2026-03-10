@@ -21,23 +21,47 @@ import pytest
 from tests._support import build_matcher, run_matcher
 
 
+def _format_exception(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
 @pytest.mark.parametrize("engine", ["dfa", "bitnfa"])
 def test_fullmatch(
-    case_idx: int, codegen_cases: list[dict], engine: str, tmp_path: Path
+    case_idx: int,
+    codegen_cases: list[dict],
+    codegen_errors: dict[tuple[str, int], str],
+    engine: str,
+    tmp_path: Path,
 ) -> None:
-    """Generate → compile → execute for every subject of *pattern*."""
+    """Generate -> compile -> execute for every subject of *pattern*."""
     case = codegen_cases[case_idx]
     pattern: str = case["pattern"]
     flags = "".join(c for c in case.get("flags", "") if c in "imsx")
     subjects: list[dict] = case["subjects"]
+    expected_error = codegen_errors.get((engine, case_idx))
 
-    # 1. Generate and compile C code
     try:
         exe = build_matcher(pattern, tmp_path, flags=flags, engine=engine)
-    except (ValueError, Exception) as exc:
-        pytest.skip(f"Unsupported pattern: {exc}")
+    except Exception as exc:
+        actual_error = _format_exception(exc)
+        if expected_error is None:
+            pytest.fail(
+                f"Unexpected compile failure for pattern {pattern!r} "
+                f"(flags={flags!r}, engine={engine}): {actual_error}"
+            )
+        assert actual_error == expected_error, (
+            f"Compile failure mismatch for pattern {pattern!r} "
+            f"(flags={flags!r}, engine={engine}): expected {expected_error!r}, "
+            f"got {actual_error!r}"
+        )
+        return
 
-    # 3. Test each subject
+    if expected_error is not None:
+        pytest.fail(
+            f"Expected compile failure for pattern {pattern!r} "
+            f"(flags={flags!r}, engine={engine}), but build succeeded: {expected_error}"
+        )
+
     for subj in subjects:
         inp: str = subj["input"]
         expected: bool = subj["match"]
